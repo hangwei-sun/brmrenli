@@ -1,0 +1,83 @@
+const fs = require('fs')
+const path = require('path')
+
+const DEFAULT_SETTINGS = {
+  // OCR引擎: 'tesseract' | 'tencent'
+  ocrEngine: 'tesseract',
+
+  // 腾讯云API配置
+  tencentSecretId: '',
+  tencentSecretKey: '',
+  tencentRegion: 'ap-guangzhou',
+
+  // 智谱AI GLM-4.6V-Flash配置
+  glmApiKey: '',
+
+  // 主题: 'light' | 'dark' | 'system'
+  theme: 'light',
+
+  // 语言
+  language: 'zh-CN',
+
+  // 自动保存识别结果
+  autoSave: false,
+
+  // 首次使用引导
+  onboarded: false
+}
+
+class SettingsStore {
+  constructor(userDataPath) {
+    this.filePath = path.join(userDataPath, 'settings.json')
+    this.settings = { ...DEFAULT_SETTINGS }
+    this.load()
+  }
+
+  load() {
+    try {
+      if (fs.existsSync(this.filePath)) {
+        const data = fs.readFileSync(this.filePath, 'utf-8')
+        const saved = JSON.parse(data)
+        // 合并默认值，确保新增配置项有默认值
+        this.settings = { ...DEFAULT_SETTINGS, ...saved }
+      }
+    } catch (err) {
+      console.error('加载设置失败:', err)
+      this.settings = { ...DEFAULT_SETTINGS }
+    }
+  }
+
+  save() {
+    try {
+      const dir = path.dirname(this.filePath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      fs.writeFileSync(this.filePath, JSON.stringify(this.settings, null, 2), 'utf-8')
+      return true
+    } catch (err) {
+      console.error('保存设置失败:', err)
+      return false
+    }
+  }
+
+  get(key) {
+    return this.settings[key]
+  }
+
+  set(key, value) {
+    this.settings[key] = value
+    return this.save()
+  }
+
+  getAll() {
+    return { ...this.settings }
+  }
+
+  updateAll(newSettings) {
+    this.settings = { ...this.settings, ...newSettings }
+    return this.save()
+  }
+}
+
+module.exports = SettingsStore

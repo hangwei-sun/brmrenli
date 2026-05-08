@@ -1,0 +1,64 @@
+{
+  "name": "leave-management",
+  "version": "1.2.0",
+  "description": "包融媒人力智慧管理系统 - 包头市融媒体中心",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "electron:build:win": "vite build && electron-builder --win",
+    "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.baotou.leave-management",
+    "productName": "包融媒人力智慧管理系统",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "src/assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "包融媒人力智慧管理系统"
+    },
+    "asarUnpack": [
+      "node_modules/tesseract.js/**",
+      "node_modules/tesseract.js-core/**",
+      "node_modules/sql.js/**",
+      "node_modules/sharp/**",
+      "node_modules/tencentcloud-sdk-nodejs-ocr/**",
+      "node_modules/tencentcloud-sdk-nodejs-common/**"
+    ]
+  },
+  "dependencies": {
+    "sharp": "^0.34.5",
+    "sql.js": "^1.11.0",
+    "tencentcloud-sdk-nodejs-ocr": "^4.1.226",
+    "tesseract.js": "^5.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "echarts": "^5.5.1",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "element-plus": "^2.9.1",
+    "vite": "^6.0.7",
+    "vue": "^3.5.13",
+    "wait-on": "^8.0.3"
+  }
+}
