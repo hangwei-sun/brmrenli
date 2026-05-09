@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 图片操作
   copyImage: (sourcePath) => ipcRenderer.invoke('image:copy', sourcePath),
   readImage: (imagePath) => ipcRenderer.invoke('image:read', imagePath),
+  saveBase64Image: (base64Data, fileName) => ipcRenderer.invoke('image:saveBase64', base64Data, fileName),
 
   // OCR识别
   recognizeOcr: (imagePath) => ipcRenderer.invoke('ocr:recognize', imagePath),
@@ -29,6 +30,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMonthlyTrend: (year) => ipcRenderer.invoke('db:getMonthlyTrend', year || ''),
   getPersonRanking: (year) => ipcRenderer.invoke('db:getPersonRanking', year || ''),
   getAvailableYears: () => ipcRenderer.invoke('db:getAvailableYears'),
+
+  // 员工管理
+  getAllEmployees: () => ipcRenderer.invoke('db:getAllEmployees'),
+  insertEmployee: (record) => ipcRenderer.invoke('db:insertEmployee', record),
+  insertEmployeesBatch: (records) => ipcRenderer.invoke('db:insertEmployeesBatch', records),
+  updateEmployee: (id, record) => ipcRenderer.invoke('db:updateEmployee', id, record),
+  deleteEmployee: (id) => ipcRenderer.invoke('db:deleteEmployee', id),
+  deleteEmployeesBatch: (ids) => ipcRenderer.invoke('db:deleteEmployeesBatch', ids),
+  searchEmployees: (conditions) => ipcRenderer.invoke('db:searchEmployees', conditions),
+  getEmployeeCount: () => ipcRenderer.invoke('db:getEmployeeCount'),
+  getBirthdayByMonth: (month) => ipcRenderer.invoke('db:getBirthdayByMonth', month),
+  getBirthdayByRange: (startMonth, endMonth) => ipcRenderer.invoke('db:getBirthdayByRange', startMonth, endMonth),
+  getBirthdayCountByMonth: (month) => ipcRenderer.invoke('db:getBirthdayCountByMonth', month),
+  getBirthdayStats: () => ipcRenderer.invoke('db:getBirthdayStats'),
 
   // 设置管理
   getSettings: () => ipcRenderer.invoke('settings:getAll'),

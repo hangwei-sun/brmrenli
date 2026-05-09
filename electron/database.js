@@ -68,6 +68,7 @@ class LeaveDatabase {
         created_at DATETIME DEFAULT (datetime('now', 'localtime'))
       )
     `)
+    this.createEmployeeTable()
   }
 
   // 执行查询并返回结果数组（每行为对象）
@@ -304,6 +305,160 @@ class LeaveDatabase {
     result.total = countResult ? countResult.total : 0
     return result
   }
+
+  // ============ 员工管理 ============
+
+  // 创建员工表
+  createEmployeeTable() {
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS employees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        id_number TEXT NOT NULL UNIQUE,
+        department TEXT,
+        created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+      )
+    `)
+  }
+
+  // 插入单个员工
+  insertEmployee(record) {
+    this._run(`
+      INSERT INTO employees (name, phone, id_number, department)
+      VALUES (?, ?, ?, ?)
+    `, [
+      record.name || '',
+      record.phone || '',
+      record.id_number || '',
+      record.department || ''
+    ])
+    const result = this._queryOne('SELECT last_insert_rowid() as id')
+    return result ? result.id : null
+  }
+
+  // 批量插入员工（跳过重复身份证号）
+  insertEmployeesBatch(records) {
+    let inserted = 0
+    let skipped = 0
+    for (const record of records) {
+      if (!record.id_number) { skipped++; continue }
+      const exists = this._queryOne('SELECT id FROM employees WHERE id_number = ?', [record.id_number])
+      if (exists) { skipped++; continue }
+      try {
+        this.insertEmployee(record)
+        inserted++
+      } catch { skipped++ }
+    }
+    return { inserted, skipped }
+  }
+
+  // 获取所有员工
+  getAllEmployees() {
+    return this._queryAll('SELECT * FROM employees ORDER BY created_at DESC')
+  }
+
+  // 删除员工
+  deleteEmployee(id) {
+    this._run('DELETE FROM employees WHERE id = ?', [id])
+    return true
+  }
+
+  // 批量删除员工
+  deleteEmployeesBatch(ids) {
+    if (!ids || ids.length === 0) return false
+    const placeholders = ids.map(() => '?').join(',')
+    this._run(`DELETE FROM employees WHERE id IN (${placeholders})`, ids)
+    return true
+  }
+
+  // 更新员工
+  updateEmployee(id, record) {
+    this._run(`
+      UPDATE employees SET
+        name = ?, phone = ?, id_number = ?, department = ?
+      WHERE id = ?
+    `, [
+      record.name || '',
+      record.phone || '',
+      record.id_number || '',
+      record.department || '',
+      id
+    ])
+    return true
+  }
+
+  // 搜索员工
+  searchEmployees(conditions = {}) {
+    let sql = "SELECT * FROM employees WHERE 1=1"
+    const params = []
+    if (conditions.name) {
+      sql += " AND name LIKE ?"
+      params.push(`%${conditions.name}%`)
+    }
+    if (conditions.department) {
+      sql += " AND department LIKE ?"
+      params.push(`%${conditions.department}%`)
+    }
+    sql += " ORDER BY created_at DESC"
+    if (conditions.limit) {
+      sql += " LIMIT ?"
+      params.push(conditions.limit)
+    }
+    return this._queryAll(sql, params)
+  }
+
+  // 获取员工总数
+  getEmployeeCount() {
+    const result = this._queryOne('SELECT COUNT(*) as total FROM employees')
+    return result ? result.total : 0
+  }
+
+  // 获取指定月份过生日的员工（从身份证号提取）
+  getBirthdayByMonth(month) {
+    const m = String(month).padStart(2, '0')
+    return this._queryAll(`
+      SELECT *, substr(id_number, 7, 8) as birth_date
+      FROM employees
+      WHERE substr(id_number, 11, 2) = ?
+      ORDER BY substr(id_number, 13, 2) ASC
+    `, [m])
+  }
+
+  // 获取指定月份范围过生日的员工
+  getBirthdayByRange(startMonth, endMonth) {
+    const sm = String(startMonth).padStart(2, '0')
+    const em = String(endMonth).padStart(2, '0')
+    return this._queryAll(`
+      SELECT *, substr(id_number, 7, 8) as birth_date
+      FROM employees
+      WHERE CAST(substr(id_number, 11, 2) AS INTEGER) BETWEEN ? AND ?
+      ORDER BY substr(id_number, 11, 2) ASC, substr(id_number, 13, 2) ASC
+    `, [parseInt(startMonth), parseInt(endMonth)])
+  }
+
+  // 获取当前月份生日人数
+  getBirthdayCountByMonth(month) {
+    const m = String(month).padStart(2, '0')
+    const result = this._queryOne(`
+      SELECT COUNT(*) as total FROM employees
+      WHERE substr(id_number, 11, 2) = ?
+    `, [m])
+    return result ? result.total : 0
+  }
+
+  // 获取按月份分组的生日人数统计
+  getBirthdayStats() {
+    return this._queryAll(`
+      SELECT substr(id_number, 11, 2) as month, COUNT(*) as count
+      FROM employees
+      WHERE id_number IS NOT NULL AND length(id_number) >= 15
+      GROUP BY month
+      ORDER BY month ASC
+    `)
+  }
+
+  // ============ 重写createTables以包含员工表 ============
 
   // 关闭数据库
   close() {

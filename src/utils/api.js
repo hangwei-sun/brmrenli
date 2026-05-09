@@ -23,6 +23,11 @@ export async function readImage(imagePath) {
   return api ? api.readImage(imagePath) : null
 }
 
+export async function saveBase64Image(base64Data, fileName) {
+  const api = getAPI()
+  return api ? api.saveBase64Image(base64Data, fileName) : ''
+}
+
 // OCR识别
 export async function recognizeOcr(imagePath) {
   const api = getAPI()
@@ -152,4 +157,78 @@ export async function testGlmApi(config) {
   const api = getAPI()
   if (!api) return { success: false, error: '仅支持Electron环境' }
   return api.testGlmApi(config)
+}
+
+// ============ 员工管理 ============
+
+export async function getAllEmployees() {
+  const api = getAPI()
+  if (!api) return []
+  return api.getAllEmployees()
+}
+
+export async function insertEmployee(record) {
+  const api = getAPI()
+  if (!api) throw new Error('浏览器模式不支持数据操作')
+  return api.insertEmployee(record)
+}
+
+export async function insertEmployeesBatch(records) {
+  const api = getAPI()
+  if (!api) throw new Error('浏览器模式不支持数据操作')
+  return api.insertEmployeesBatch(records)
+}
+
+export async function updateEmployee(id, record) {
+  const api = getAPI()
+  if (!api) throw new Error('浏览器模式不支持数据操作')
+  return api.updateEmployee(id, record)
+}
+
+export async function deleteEmployee(id) {
+  const api = getAPI()
+  if (!api) throw new Error('浏览器模式不支持数据操作')
+  return api.deleteEmployee(id)
+}
+
+export async function deleteEmployeesBatch(ids) {
+  const api = getAPI()
+  if (!api) throw new Error('浏览器模式不支持数据操作')
+  return api.deleteEmployeesBatch(ids)
+}
+
+export async function searchEmployees(conditions) {
+  const api = getAPI()
+  if (!api) return []
+  return api.searchEmployees(conditions)
+}
+
+export async function getEmployeeCount() {
+  const api = getAPI()
+  if (!api) return 0
+  return api.getEmployeeCount()
+}
+
+export async function getBirthdayByMonth(month) {
+  const api = getAPI()
+  if (!api) return []
+  return api.getBirthdayByMonth(month)
+}
+
+export async function getBirthdayByRange(startMonth, endMonth) {
+  const api = getAPI()
+  if (!api) return []
+  return api.getBirthdayByRange(startMonth, endMonth)
+}
+
+export async function getBirthdayCountByMonth(month) {
+  const api = getAPI()
+  if (!api) return 0
+  return api.getBirthdayCountByMonth(month)
+}
+
+export async function getBirthdayStats() {
+  const api = getAPI()
+  if (!api) return []
+  return api.getBirthdayStats()
 }

@@ -64,6 +64,15 @@
           </template>
           <Statistics />
         </el-tab-pane>
+
+        <el-tab-pane lazy>
+          <template #label>
+            <span class="tab-label">
+              <el-icon><Present /></el-icon> 生日祝福
+            </span>
+          </template>
+          <BirthdayBlessing ref="birthdayRef" />
+        </el-tab-pane>
       </el-tabs>
     </el-main>
 
@@ -81,6 +90,17 @@
       destroy-on-close
     >
       <el-form :model="editForm" label-width="100px" :rules="formRules" ref="editFormRef">
+        <!-- 申请日期 - 最前面，整行显示 -->
+        <el-form-item label="申请日期">
+          <el-date-picker
+            v-model="editForm.apply_date"
+            type="date"
+            placeholder="选择日期"
+            value-format="YYYY-MM-DD"
+            style="width:100%"
+          />
+        </el-form-item>
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="申请人" prop="applicant">
@@ -93,6 +113,7 @@
             </el-form-item>
           </el-col>
         </el-row>
+
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="代办人">
@@ -107,8 +128,9 @@
             </el-form-item>
           </el-col>
         </el-row>
+
         <el-row :gutter="20">
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="开始日期" prop="start_date">
               <el-date-picker
                 v-model="editForm.start_date"
@@ -119,7 +141,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="结束日期" prop="end_date">
               <el-date-picker
                 v-model="editForm.end_date"
@@ -130,22 +152,12 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
-            <el-form-item label="天数" prop="days">
-              <el-input-number v-model="editForm.days" :min="0" :max="365" style="width:100%" />
-            </el-form-item>
-          </el-col>
         </el-row>
+
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="申请日期">
-              <el-date-picker
-                v-model="editForm.apply_date"
-                type="date"
-                placeholder="选择日期"
-                value-format="YYYY-MM-DD"
-                style="width:100%"
-              />
+            <el-form-item label="天数" prop="days">
+              <el-input-number v-model="editForm.days" :min="0" :max="365" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -182,6 +194,7 @@ import ImageUpload from './components/ImageUpload.vue'
 import DataTable from './components/DataTable.vue'
 import SearchPanel from './components/SearchPanel.vue'
 import Statistics from './components/Statistics.vue'
+import BirthdayBlessing from './components/BirthdayBlessing.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
 import { Setting } from '@element-plus/icons-vue'
 
@@ -189,6 +202,7 @@ const activeTab = ref('upload')
 const records = ref([])
 const totalRecords = ref(0)
 const dataTableRef = ref(null)
+const birthdayRef = ref(null)
 const editDialogVisible = ref(false)
 const editFormRef = ref(null)
 const settingsVisible = ref(false)
@@ -196,7 +210,8 @@ const currentEngine = ref('tesseract')
 
 const engineLabel = computed(() => {
   switch (currentEngine.value) {
-    case 'glm': return 'GLM-4.6V-Flash'
+    case 'glm-ocr': return 'GLM-OCR'
+    case 'glm': return 'GLM-4.6V'
     case 'tencent': return '腾讯云OCR'
     default: return 'Tesseract OCR'
   }
@@ -204,7 +219,8 @@ const engineLabel = computed(() => {
 
 const engineTagType = computed(() => {
   switch (currentEngine.value) {
-    case 'glm': return 'success'
+    case 'glm-ocr': return 'success'
+    case 'glm': return ''
     case 'tencent': return ''
     default: return 'info'
   }

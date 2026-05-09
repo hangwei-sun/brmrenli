@@ -148,6 +148,9 @@ class OcrEngine {
     if (engine === 'glm' && this.settings?.glmApiKey) {
       return this.recognizeWithGLM(imagePath)
     }
+    if (engine === 'glm-ocr' && this.settings?.glmApiKey) {
+      return this.recognizeWithGlmOcr(imagePath)
+    }
     return this.recognizeWithTesseract(imagePath)
   }
 
@@ -341,6 +344,167 @@ class OcrEngine {
       cancel_date: parsed.cancel_date || '',
       fieldConfidence: {},
       extractedWords: {}
+    }
+  }
+
+  // ============ GLM-OCR 专用OCR模型 ============
+  async recognizeWithGlmOcr(imagePath) {
+    if (!this.settings?.glmApiKey) {
+      throw new Error('请先在设置中配置智谱AI API密钥')
+    }
+
+    const imageBuffer = fs.readFileSync(imagePath)
+    const ext = path.extname(imagePath).toLowerCase().replace('.', '')
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'bmp' ? 'image/bmp' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
+    const base64 = imageBuffer.toString('base64')
+    const dataUrl = `data:${mimeType};base64,${base64}`
+
+    const apiKey = this.settings.glmApiKey
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/layout_parsing', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'glm-ocr',
+        file: dataUrl
+      })
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '')
+      let errMsg
+      try {
+        errMsg = JSON.parse(errText).error?.message || errText
+      } catch {
+        errMsg = errText || `HTTP ${response.status}`
+      }
+      throw new Error(`GLM-OCR调用失败: ${errMsg}`)
+    }
+
+    const result = await response.json()
+    console.log("GLM-OCR raw keys:", Object.keys(result))
+
+    let allElements = []
+    let markdownText = ""
+
+    // 路径1：嵌套 pages.elements
+    const pages = result.pages || result.data?.pages || []
+    for (const page of pages) {
+      for (const el of (page.elements || [])) {
+        const text = el.content || el.text || ""
+        if (text.trim()) {
+          allElements.push({
+            text,
+            confidence: Math.round((el.confidence || 0.9) * 100),
+            bbox: el.bbox || el.box || [0, 0, 0, 0]
+          })
+        }
+      }
+    }
+
+    // 路径2：扁平 elements 数组
+    if (allElements.length === 0 && Array.isArray(result.elements)) {
+      for (const el of result.elements) {
+        const text = el.content || el.text || ""
+        if (text.trim()) {
+          allElements.push({
+            text,
+            confidence: Math.round((el.confidence || 0.85) * 100),
+            bbox: el.bbox || el.box || [0, 0, 0, 0]
+          })
+        }
+      }
+    }
+
+    // 路径3：result.ocr_result 或 result.text
+    if (allElements.length === 0 && (result.ocr_result || result.text)) {
+      const rawText = result.ocr_result || result.text || ''
+      rawText.split('\n').filter(l => l.trim()).forEach((line, i) => {
+        allElements.push({
+          text: line.trim(),
+          confidence: 85,
+          bbox: [0, i * 30, 100, i * 30 + 30]
+        })
+      })
+    }
+
+    // 路径4：从 markdown 解析
+    markdownText = result.markdown || result.data?.markdown || ''
+    if (allElements.length === 0 && markdownText) {
+      markdownText.split('\n').filter(l => l.trim() && !l.startsWith('|'))
+        .forEach((line, i) => {
+          const text = line.replace(/^[*#\\-]+\\s*/, '').replace(/\\*\\*/g, '').trim()
+          if (text) {
+            allElements.push({ text, confidence: 80, bbox: [0, i * 30, 100, i * 30 + 30] })
+          }
+        })
+    }
+
+    // 路径5：完全回退到GLM-4.6V
+    if (allElements.length === 0) {
+      console.log("GLM-OCR empty, falling back to GLM-4.6V")
+      return this.recognizeWithGLM(imagePath)
+    }
+
+    console.log("GLM-OCR:", allElements.length, "elements")
+
+    // 转为统一格式
+    const words = allElements.map((el, idx) => ({
+      text: el.text,
+      confidence: el.confidence,
+      bbox: Array.isArray(el.bbox) && el.bbox.length === 4
+        ? { x0: el.bbox[0], y0: el.bbox[1], x1: el.bbox[2], y1: el.bbox[3] }
+        : { x0: 0, y0: idx * 30, x1: 100, y1: idx * 30 + 30 }
+    }))
+
+    const fullText = words.map(w => w.text).join('\n')
+    const avgConfidence = words.length > 0
+      ? Math.round(words.reduce((s, w) => s + w.confidence, 0) / words.length)
+      : 85
+
+    // 过滤印刷体
+    const filteredWords = words.filter(w => !this.isPrintedText(w.text))
+
+    // 空间分析提取字段
+    const lines = this.groupWordsByLines(filteredWords.length > 0 ? filteredWords : words)
+    const extracted = this.extractFieldsWithSpatialAnalysis({
+      text: fullText,
+      confidence: avgConfidence,
+      words: filteredWords.length > 0 ? filteredWords : words,
+      lines,
+      blocks: []
+    })
+
+    // GLM-OCR未识别的字段通过大模型补充
+    const missingFields = []
+    if (!extracted.applicant) missingFields.push('申请人')
+    if (!extracted.leave_type) missingFields.push('请假类型')
+    if (!extracted.start_date) missingFields.push('开始日期')
+    if (!extracted.end_date) missingFields.push('结束日期')
+
+    if (missingFields.length > 0) {
+      try {
+        const supplement = await this.recognizeWithGLM(imagePath)
+        for (const field of missingFields) {
+          const keyMap = {
+            '申请人': 'applicant', '请假类型': 'leave_type',
+            '开始日期': 'start_date', '结束日期': 'end_date'
+          }
+          const key = keyMap[field]
+          if (supplement[key] && !extracted[key]) {
+            extracted[key] = supplement[key]
+          }
+        }
+      } catch { /* GLM补充失败不阻塞主流程 */ }
+    }
+
+    return {
+      fullText: this.filterFullText(fullText),
+      confidence: avgConfidence,
+      engine: 'glm-ocr',
+      ...extracted
     }
   }
 

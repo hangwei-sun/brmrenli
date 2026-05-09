@@ -21,6 +21,7 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 700,
     title: '包融媒人力智慧管理系统',
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -95,6 +96,24 @@ ipcMain.handle('image:copy', async (event, sourcePath) => {
     // 如果复制失败，返回原路径
     console.error('图片复制失败:', err)
     return sourcePath
+  }
+})
+
+// 保存base64图片到应用目录（用于手动录入上传的图片）
+ipcMain.handle('image:saveBase64', async (event, base64Data, fileName) => {
+  const userDataPath = app.getPath('userData')
+  const imagesPath = path.join(userDataPath, 'images')
+  const timestamp = Date.now()
+  const ext = path.extname(fileName) || '.png'
+  const destName = `${timestamp}${ext}`
+  const destPath = path.join(imagesPath, destName)
+  try {
+    const base64 = base64Data.replace(/^data:image\/\w+;base64,/, '')
+    fs.writeFileSync(destPath, Buffer.from(base64, 'base64'))
+    return destPath
+  } catch (err) {
+    console.error('保存图片失败:', err)
+    return ''
   }
 })
 
@@ -259,6 +278,56 @@ ipcMain.handle('settings:testTencent', async (event, { secretId, secretKey, regi
     }
     return { success: false, error: `连接失败: ${msg}` }
   }
+})
+
+// ==================== 员工管理 ====================
+
+ipcMain.handle('db:getAllEmployees', async () => {
+  return db.getAllEmployees()
+})
+
+ipcMain.handle('db:insertEmployee', async (event, record) => {
+  return db.insertEmployee(record)
+})
+
+ipcMain.handle('db:insertEmployeesBatch', async (event, records) => {
+  return db.insertEmployeesBatch(records)
+})
+
+ipcMain.handle('db:updateEmployee', async (event, id, record) => {
+  return db.updateEmployee(id, record)
+})
+
+ipcMain.handle('db:deleteEmployee', async (event, id) => {
+  return db.deleteEmployee(id)
+})
+
+ipcMain.handle('db:deleteEmployeesBatch', async (event, ids) => {
+  return db.deleteEmployeesBatch(ids)
+})
+
+ipcMain.handle('db:searchEmployees', async (event, conditions) => {
+  return db.searchEmployees(conditions)
+})
+
+ipcMain.handle('db:getEmployeeCount', async () => {
+  return db.getEmployeeCount()
+})
+
+ipcMain.handle('db:getBirthdayByMonth', async (event, month) => {
+  return db.getBirthdayByMonth(month)
+})
+
+ipcMain.handle('db:getBirthdayByRange', async (event, startMonth, endMonth) => {
+  return db.getBirthdayByRange(startMonth, endMonth)
+})
+
+ipcMain.handle('db:getBirthdayCountByMonth', async (event, month) => {
+  return db.getBirthdayCountByMonth(month)
+})
+
+ipcMain.handle('db:getBirthdayStats', async () => {
+  return db.getBirthdayStats()
 })
 
 // 测试智谱AI GLM API连接

@@ -13,23 +13,25 @@
         <el-form label-width="120px" label-position="left">
           <el-form-item label="识别引擎">
             <el-radio-group v-model="form.ocrEngine">
+              <el-radio value="glm-ocr">GLM-OCR (云端/专业OCR/低成本)</el-radio>
               <el-radio value="glm">GLM-4.6V (云端/高精度)</el-radio>
               <el-radio value="tesseract">Tesseract (本地/免费)</el-radio>
               <el-radio value="tencent">腾讯云OCR (云端/付费)</el-radio>
             </el-radio-group>
             <div class="form-hint">
-              <span v-if="form.ocrEngine === 'glm'">智谱AI大模型，手写体识别率约90-98%，自动忽略印刷体</span>
+              <span v-if="form.ocrEngine === 'glm-ocr'">智谱AI专业OCR模型，版面分析+精准定位，成本约为传统OCR的1/10</span>
+              <span v-else-if="form.ocrEngine === 'glm'">智谱AI大模型，手写体识别率约90-98%，自动忽略印刷体</span>
               <span v-else-if="form.ocrEngine === 'tesseract'">使用本地Tesseract引擎，无需联网，手写体识别率约50-65%</span>
               <span v-else>使用腾讯云手写体识别API，需要联网，每月1000次免费额度</span>
             </div>
           </el-form-item>
 
-          <template v-if="form.ocrEngine === 'glm'">
-            <el-divider content-position="left">智谱AI GLM API配置</el-divider>
+          <template v-if="form.ocrEngine === 'glm-ocr' || form.ocrEngine === 'glm'">
+            <el-divider content-position="left">智谱AI API配置</el-divider>
             <el-form-item label="API Key">
               <el-input v-model="form.glmApiKey" placeholder="请输入智谱AI API Key" show-password type="password" />
               <div class="form-hint">
-                获取方式：访问 <a href="#" @click.prevent="openGlmUrl">open.bigmodel.cn</a> 注册后在API Keys页面创建
+                获取方式：访问 <a href="#" @click.prevent="openGlmUrl">open.bigmodel.cn</a> 注册后在API Keys页面创建（GLM-OCR与GLM-4.6V共用同一Key）
               </div>
             </el-form-item>
             <el-form-item label="">
@@ -101,12 +103,16 @@
         </el-form>
       </el-tab-pane>
 
-      <!-- 识别设置 -->
-      <el-tab-pane label="识别" name="recognition">
-        <el-form label-width="140px" label-position="left">
+      <!-- 通用设置 -->
+      <el-tab-pane label="通用" name="recognition">
+        <el-form label-width="160px" label-position="left">
           <el-form-item label="识别后自动保存">
             <el-switch v-model="form.autoSave" />
             <span class="form-hint-inline">开启后，OCR识别完成自动保存到数据库</span>
+          </el-form-item>
+          <el-form-item label="隐私模式">
+            <el-switch v-model="form.privacyMode" />
+            <span class="form-hint-inline">开启后，电话和身份证号仅部分显示（如138****1234）</span>
           </el-form-item>
         </el-form>
       </el-tab-pane>
@@ -153,7 +159,7 @@ const testingGlm = ref(false)
 const saving = ref(false)
 const testResult = ref(null)
 const testGlmResult = ref(null)
-const appVersion = ref('1.1.0')
+const appVersion = ref(__APP_VERSION__)
 
 const form = reactive({
   ocrEngine: 'tesseract',
@@ -163,7 +169,8 @@ const form = reactive({
   tencentRegion: 'ap-guangzhou',
   theme: 'light',
   language: 'zh-CN',
-  autoSave: false
+  autoSave: false,
+  privacyMode: false
 })
 
 // 同步v-model
@@ -185,7 +192,8 @@ async function loadSettings() {
         tencentRegion: settings.tencentRegion || 'ap-guangzhou',
         theme: settings.theme || 'light',
         language: settings.language || 'zh-CN',
-        autoSave: settings.autoSave || false
+        autoSave: settings.autoSave || false,
+        privacyMode: settings.privacyMode || false
       })
     }
   } catch (err) {
@@ -205,7 +213,8 @@ async function saveSettings() {
       tencentRegion: form.tencentRegion,
       theme: form.theme,
       language: form.language,
-      autoSave: form.autoSave
+      autoSave: form.autoSave,
+      privacyMode: form.privacyMode
     }
     await window.electronAPI.updateAllSettings(settings)
     ElMessage.success('设置已保存')

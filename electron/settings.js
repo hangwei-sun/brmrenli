@@ -22,6 +22,9 @@ const DEFAULT_SETTINGS = {
   // 自动保存识别结果
   autoSave: false,
 
+  // 隐私模式：开启后电话和身份证号部分隐藏
+  privacyMode: false,
+
   // 首次使用引导
   onboarded: false
 }

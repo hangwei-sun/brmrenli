@@ -104,6 +104,26 @@
       destroy-on-close
     >
       <el-form :model="manualForm" label-width="90px" :rules="manualRules" ref="manualFormRef">
+        <!-- 申请日期 - 最上面，整行显示 -->
+        <el-form-item label="申请日期">
+          <el-date-picker v-model="manualForm.apply_date" type="date" value-format="YYYY-MM-DD" placeholder="选择申请日期" style="width:100%" />
+        </el-form-item>
+
+        <!-- 识图上传 -->
+        <el-form-item label="图片上传">
+          <div class="manual-upload" @click="manualFileInput?.click()">
+            <input ref="manualFileInput" type="file" accept="image/*" @change="onManualImageChange" style="display:none" />
+            <template v-if="manualImagePreview">
+              <img :src="manualImagePreview" class="manual-image-preview" />
+              <el-icon class="manual-image-remove" @click.stop="removeManualImage" color="#f56c6c"><CircleCloseFilled /></el-icon>
+            </template>
+            <template v-else>
+              <el-icon :size="36" color="#c0c4cc"><Plus /></el-icon>
+              <p class="manual-upload-hint">点击上传请假条图片（可选）</p>
+            </template>
+          </div>
+        </el-form-item>
+
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="申请人" prop="applicant">
@@ -131,26 +151,21 @@
           </el-col>
         </el-row>
         <el-row :gutter="16">
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="开始日期" prop="start_date">
               <el-date-picker v-model="manualForm.start_date" type="date" value-format="YYYY-MM-DD" placeholder="选择" style="width:100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="结束日期" prop="end_date">
               <el-date-picker v-model="manualForm.end_date" type="date" value-format="YYYY-MM-DD" placeholder="选择" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="天数" prop="days">
-              <el-input-number v-model="manualForm.days" :min="1" :max="365" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="申请日期">
-              <el-date-picker v-model="manualForm.apply_date" type="date" value-format="YYYY-MM-DD" placeholder="选择" style="width:100%" />
+            <el-form-item label="天数" prop="days">
+              <el-input-number v-model="manualForm.days" :min="1" :max="365" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -175,7 +190,7 @@
 import { ref, reactive } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import OcrPreview from './OcrPreview.vue'
-import { openImages, readImage, copyImage, recognizeOcr, insertRecord } from '../utils/api.js'
+import { openImages, readImage, copyImage, recognizeOcr, insertRecord, saveBase64Image } from '../utils/api.js'
 
 const emit = defineEmits(['recognized'])
 
@@ -188,6 +203,9 @@ const leaveTypes = [
 const showManualDialog = ref(false)
 const savingManual = ref(false)
 const manualFormRef = ref(null)
+const manualFileInput = ref(null)
+const manualImagePreview = ref('')
+const manualImageFile = ref(null)
 
 const manualForm = reactive({
   applicant: '',
@@ -210,12 +228,37 @@ const manualRules = {
   days: [{ required: true, message: '请输入天数', trigger: 'blur' }]
 }
 
+// 手动录入图片处理
+function onManualImageChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  manualImageFile.value = file
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    manualImagePreview.value = ev.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeManualImage() {
+  manualImagePreview.value = ''
+  manualImageFile.value = null
+  if (manualFileInput.value) manualFileInput.value.value = ''
+}
+
 async function saveManualEntry() {
   const valid = await manualFormRef.value.validate().catch(() => false)
   if (!valid) return
 
   savingManual.value = true
   try {
+    let imagePath = ''
+    // 如果手动上传了图片，通过base64保存到应用目录
+    if (manualImagePreview.value && manualImageFile.value) {
+      try {
+        imagePath = await saveBase64Image(manualImagePreview.value, manualImageFile.value.name || 'image.png')
+      } catch { /* 浏览器模式回退 */ }
+    }
     await insertRecord({
       applicant: manualForm.applicant,
       department: manualForm.department,
@@ -226,13 +269,14 @@ async function saveManualEntry() {
       days: manualForm.days,
       apply_date: manualForm.apply_date,
       cancel_date: manualForm.cancel_date,
-      image_path: '',
-      ocr_confidence: 100, // 手动录入置信度100%
+      image_path: imagePath,
+      ocr_confidence: 100,
       remark: manualForm.remark
     })
     ElMessage.success('手动录入保存成功')
     showManualDialog.value = false
-    // 重置表单
+    manualImagePreview.value = ''
+    manualImageFile.value = null
     Object.assign(manualForm, {
       applicant: '', department: '', agent: '', leave_type: '',
       start_date: '', end_date: '', days: 0, apply_date: '', cancel_date: '', remark: ''
@@ -533,5 +577,46 @@ async function handleSaveAll() {
   align-items: center;
   gap: 8px;
   font-weight: 600;
+}
+
+/* 手动录入图片上传 */
+.manual-upload {
+  width: 100%;
+  min-height: 100px;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.manual-upload:hover {
+  border-color: #409EFF;
+  background: rgba(64, 158, 255, 0.04);
+}
+
+.manual-upload-hint {
+  font-size: 12px;
+  color: #c0c4cc;
+  margin-left: 8px;
+}
+
+.manual-image-preview {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+.manual-image-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 1;
 }
 </style>

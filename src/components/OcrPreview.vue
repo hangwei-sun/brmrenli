@@ -33,36 +33,57 @@
 
           <div class="preview-form">
             <el-form label-width="90px" size="default">
-              <el-form-item label="申请人">
-                <el-input v-model="item.applicant" @change="emitUpdate(index, 'applicant', $event)">
-                  <template #append>
-                    <span class="confidence-stars">{{ getStars(item.fieldConfidence?.applicant) }}</span>
-                  </template>
-                </el-input>
+              <!-- 申请日期 - 最前面，一栏显示 -->
+              <el-form-item label="申请日期">
+                <el-date-picker
+                  v-model="item.apply_date"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  @change="emitUpdate(index, 'apply_date', $event)"
+                  style="width:100%"
+                />
               </el-form-item>
 
-              <el-form-item label="部门">
-                <el-input v-model="item.department" @change="emitUpdate(index, 'department', $event)">
-                  <template #append>
-                    <span class="confidence-stars">{{ getStars(item.fieldConfidence?.department) }}</span>
-                  </template>
-                </el-input>
-              </el-form-item>
+              <el-row :gutter="12">
+                <el-col :span="12">
+                  <el-form-item label="申请人">
+                    <el-input v-model="item.applicant" @change="emitUpdate(index, 'applicant', $event)">
+                      <template #append>
+                        <span class="confidence-stars">{{ getStars(item.fieldConfidence?.applicant) }}</span>
+                      </template>
+                    </el-input>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="部门">
+                    <el-input v-model="item.department" @change="emitUpdate(index, 'department', $event)">
+                      <template #append>
+                        <span class="confidence-stars">{{ getStars(item.fieldConfidence?.department) }}</span>
+                      </template>
+                    </el-input>
+                  </el-form-item>
+                </el-col>
+              </el-row>
 
-              <el-form-item label="代办人">
-                <el-input v-model="item.agent" @change="emitUpdate(index, 'agent', $event)">
-                  <template #append>
-                    <span class="confidence-stars">{{ getStars(item.fieldConfidence?.agent) }}</span>
-                  </template>
-                </el-input>
-              </el-form-item>
-
-              <el-form-item label="请假类型">
-                <el-select v-model="item.leave_type" @change="emitUpdate(index, 'leave_type', $event)" style="width:100%">
-                  <el-option v-for="t in leaveTypes" :key="t" :label="t" :value="t" />
-                </el-select>
-                <span class="confidence-stars" style="margin-left:8px">{{ getStars(item.fieldConfidence?.leave_type) }}</span>
-              </el-form-item>
+              <el-row :gutter="12">
+                <el-col :span="12">
+                  <el-form-item label="代办人">
+                    <el-input v-model="item.agent" @change="emitUpdate(index, 'agent', $event)">
+                      <template #append>
+                        <span class="confidence-stars">{{ getStars(item.fieldConfidence?.agent) }}</span>
+                      </template>
+                    </el-input>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="请假类型">
+                    <el-select v-model="item.leave_type" @change="emitUpdate(index, 'leave_type', $event)" style="width:100%">
+                      <el-option v-for="t in leaveTypes" :key="t" :label="t" :value="t" />
+                    </el-select>
+                    <span class="confidence-stars" style="margin-left:8px">{{ getStars(item.fieldConfidence?.leave_type) }}</span>
+                  </el-form-item>
+                </el-col>
+              </el-row>
 
               <el-row :gutter="12">
                 <el-col :span="12">
@@ -92,24 +113,13 @@
               </el-row>
 
               <el-row :gutter="12">
-                <el-col :span="8">
+                <el-col :span="12">
                   <el-form-item label="天数">
                     <el-input-number v-model="item.days" :min="1" :max="365" @change="emitUpdate(index, 'days', $event)" style="width:100%" />
                     <span class="confidence-stars">{{ getStars(item.fieldConfidence?.days) }}</span>
                   </el-form-item>
                 </el-col>
-                <el-col :span="8">
-                  <el-form-item label="申请日期">
-                    <el-date-picker
-                      v-model="item.apply_date"
-                      type="date"
-                      value-format="YYYY-MM-DD"
-                      @change="emitUpdate(index, 'apply_date', $event)"
-                      style="width:100%"
-                    />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="8">
+                <el-col :span="12">
                   <el-form-item label="销假日期">
                     <el-date-picker
                       v-model="item.cancel_date"
