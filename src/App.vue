@@ -369,6 +369,9 @@ function onSettingsSaved(settings) {
   if (settings.ocrEngine) {
     currentEngine.value = settings.ocrEngine
   }
+  if (birthdayRef.value && settings.privacyMode !== undefined) {
+    birthdayRef.value.updatePrivacyMode(settings.privacyMode)
+  }
 }
 
 onMounted(() => {

@@ -317,21 +317,47 @@ class LeaveDatabase {
         phone TEXT,
         id_number TEXT NOT NULL UNIQUE,
         department TEXT,
+        position TEXT,
+        employment_type TEXT,
+        remark TEXT,
         created_at DATETIME DEFAULT (datetime('now', 'localtime'))
       )
     `)
+    this.migrateEmployeeTable()
+  }
+
+  // 自动迁移旧表结构（补齐缺失列）
+  migrateEmployeeTable() {
+    const tableInfo = this._queryAll("PRAGMA table_info(employees)")
+    const columnNames = tableInfo.map(c => c.name)
+
+    const migrations = [
+      { name: 'position', sql: 'ALTER TABLE employees ADD COLUMN position TEXT' },
+      { name: 'employment_type', sql: 'ALTER TABLE employees ADD COLUMN employment_type TEXT' },
+      { name: 'remark', sql: 'ALTER TABLE employees ADD COLUMN remark TEXT' }
+    ]
+
+    for (const m of migrations) {
+      if (!columnNames.includes(m.name)) {
+        this.db.run(m.sql)
+        this.save()
+      }
+    }
   }
 
   // 插入单个员工
   insertEmployee(record) {
     this._run(`
-      INSERT INTO employees (name, phone, id_number, department)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO employees (name, phone, id_number, department, position, employment_type, remark)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
       record.name || '',
       record.phone || '',
       record.id_number || '',
-      record.department || ''
+      record.department || '',
+      record.position || '',
+      record.employment_type || '',
+      record.remark || ''
     ])
     const result = this._queryOne('SELECT last_insert_rowid() as id')
     return result ? result.id : null
@@ -376,13 +402,17 @@ class LeaveDatabase {
   updateEmployee(id, record) {
     this._run(`
       UPDATE employees SET
-        name = ?, phone = ?, id_number = ?, department = ?
+        name = ?, phone = ?, id_number = ?, department = ?,
+        position = ?, employment_type = ?, remark = ?
       WHERE id = ?
     `, [
       record.name || '',
       record.phone || '',
       record.id_number || '',
       record.department || '',
+      record.position || '',
+      record.employment_type || '',
+      record.remark || '',
       id
     ])
     return true

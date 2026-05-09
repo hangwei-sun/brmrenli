@@ -199,6 +199,9 @@ CREATE TABLE employees (
     phone           TEXT,              -- 电话
     id_number       TEXT NOT NULL UNIQUE, -- 身份证号（唯一）
     department      TEXT,              -- 所在部门
+    position        TEXT,              -- 职务
+    employment_type TEXT,              -- 在编/聘用
+    remark          TEXT,              -- 备注
     created_at      DATETIME DEFAULT (datetime('now','localtime'))
 );
 ```
@@ -218,9 +221,21 @@ CREATE TABLE employees (
 5. 所有数据库操作使用参数化查询，防止SQL注入
 6. 识别结果建议人工复核后再保存，手动录入数据置信度为100
 7. 设置保存在 `%APPDATA%/leave-management/settings.json`
+8. **Windows安装后图标不显示？** 若遇到桌面快捷方式或EXE图标仍为默认Electron图标，运行 `ie4uinit.exe -show` 刷新Windows图标缓存
+
+## 构建常见问题
+
+### EXE图标不显示（Windows）
+electron-builder 内置的 rcedit 在构建时从 GitHub 下载 winCodeSign 工具，网络不稳定会导致下载失败，EXE 保留默认图标。本项目已通过 `afterPack` 钩子使用本地 `rcedit` npm 包嵌入图标，无需联网。若仍遇问题：
+```bash
+# 手动应用图标到已构建的EXE
+node -e "const {rcedit}=require('rcedit');rcedit('release/win-unpacked/包融媒人力智慧管理系统.exe',{icon:'build/icon.ico'})"
+```
 
 ## 版本历史
 
+- **v1.8.0** — 修复EXE图标（afterPack钩子+本地rcedit）、隐私模式实时生效、花名册新增职务/在编聘用/备注
+- **v1.7.0** — 花名册与OCR申请人匹配（自动补全部门）、匹配状态展示
 - **v1.6.0** — GLM-OCR引擎接入、手动录入申请日期置顶+识图上传、生日清单Excel导出
 - **v1.5.0** — Logo全面替换、OCR预览布局优化、手动录入优化、版本号与打包同步
 - **v1.4.0** — GLM-OCR集成（layout_parsing API）

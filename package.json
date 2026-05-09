@@ -1,6 +1,6 @@
 {
   "name": "leave-management",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "description": "包融媒人力智慧管理系统 - 包头市融媒体中心",
   "main": "electron/main.js",
   "scripts": {
@@ -35,6 +35,7 @@
       "uninstallerIcon": "build/icon.ico",
       "shortcutName": "包融媒人力智慧管理系统"
     },
+    "afterPack": "scripts/afterPack.js",
     "asarUnpack": [
       "node_modules/tesseract.js/**",
       "node_modules/tesseract.js-core/**",
@@ -60,6 +61,8 @@
     "electron": "^33.3.1",
     "electron-builder": "^25.1.8",
     "element-plus": "^2.9.1",
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.1",
     "vite": "^6.0.7",
     "vue": "^3.5.13",
     "wait-on": "^8.0.3"

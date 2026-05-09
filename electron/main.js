@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const Database = require('./database')
@@ -21,7 +21,7 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 700,
     title: '包融媒人力智慧管理系统',
-    icon: path.join(__dirname, 'icon.ico'),
+    icon: nativeImage.createFromPath(path.join(__dirname, 'icon.ico')),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

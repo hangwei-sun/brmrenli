@@ -140,6 +140,15 @@
           </template>
         </el-table-column>
         <el-table-column prop="department" label="部门" min-width="120" />
+        <el-table-column prop="position" label="职务" min-width="100" />
+        <el-table-column label="在编/聘用" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.employment_type" :type="row.employment_type === '在编' ? 'success' : ''" size="small">
+              {{ row.employment_type }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
             <el-button type="danger" size="small" text @click="deleteSingle(row.id)">删除</el-button>
@@ -162,6 +171,18 @@
         </el-form-item>
         <el-form-item label="部门">
           <el-input v-model="manualForm.department" placeholder="请输入所在部门" />
+        </el-form-item>
+        <el-form-item label="职务">
+          <el-input v-model="manualForm.position" placeholder="请输入职务" />
+        </el-form-item>
+        <el-form-item label="在编/聘用">
+          <el-select v-model="manualForm.employment_type" placeholder="请选择" style="width:100%" clearable>
+            <el-option label="在编" value="在编" />
+            <el-option label="聘用" value="聘用" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="manualForm.remark" type="textarea" :rows="2" placeholder="可选备注" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -236,7 +257,10 @@ const manualForm = reactive({
   name: '',
   phone: '',
   id_number: '',
-  department: ''
+  department: '',
+  position: '',
+  employment_type: '',
+  remark: ''
 })
 
 // 筛选
@@ -372,8 +396,11 @@ async function doImport() {
       const phone = String(row['电话'] || row['phone'] || row['手机'] || row['手机号'] || '')
       const idNumber = String(row['身份证号'] || row['id_number'] || row['身份证'] || row['证件号'] || '')
       const department = row['部门'] || row['department'] || row['所在部门'] || row['所属部门'] || ''
+      const position = row['职务'] || row['position'] || row['职位'] || ''
+      const employmentType = row['在编/聘用'] || row['employment_type'] || row['用工性质'] || ''
+      const remark = row['备注'] || row['remark'] || row['note'] || ''
       if (idNumber && name) {
-        records.push({ name, phone, id_number: idNumber.trim(), department })
+        records.push({ name, phone, id_number: idNumber.trim(), department, position, employment_type: employmentType.trim(), remark })
       }
     })
     if (records.length === 0) {
@@ -410,8 +437,8 @@ function readExcelFile(file) {
 }
 
 function downloadTemplate() {
-  const header = ['姓名', '电话', '身份证号', '部门']
-  const sample = ['张三', '13800138000', '110101199001011234', '融媒体中心']
+  const header = ['姓名', '电话', '身份证号', '部门', '职务', '在编/聘用', '备注']
+  const sample = ['张三', '13800138000', '110101199001011234', '融媒体中心', '主任编辑', '在编', '']
   const ws = XLSX.utils.aoa_to_sheet([header, sample])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '员工信息')
@@ -444,6 +471,9 @@ function openManualDialog() {
   manualForm.phone = ''
   manualForm.id_number = ''
   manualForm.department = ''
+  manualForm.position = ''
+  manualForm.employment_type = ''
+  manualForm.remark = ''
   manualDialogVisible.value = true
 }
 
@@ -472,13 +502,16 @@ function exportBirthdayList() {
     ElMessage.warning('暂无生日员工可导出')
     return
   }
-  const header = ['姓名', '电话', '身份证号', '出生日期', '部门']
+  const header = ['姓名', '电话', '身份证号', '出生日期', '部门', '职务', '在编/聘用', '备注']
   const rows = birthdayList.value.map(emp => [
     emp.name || '',
     emp.phone || '',
     privacyMode.value ? maskIdNumber(emp.id_number) : (emp.id_number || ''),
     formatBirthday(emp.birth_date || emp.id_number),
-    emp.department || ''
+    emp.department || '',
+    emp.position || '',
+    emp.employment_type || '',
+    emp.remark || ''
   ])
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
   const wb = XLSX.utils.book_new()
@@ -488,13 +521,18 @@ function exportBirthdayList() {
   ElMessage.success('导出成功')
 }
 
-function refresh() {
+async function refresh() {
+  await loadPrivacySetting()
   loadEmployees()
   loadBirthdayData()
 }
 
-// 向父组件暴露刷新方法
-defineExpose({ refresh })
+function updatePrivacyMode(val) {
+  privacyMode.value = val
+}
+
+// 向父组件暴露方法
+defineExpose({ refresh, updatePrivacyMode })
 
 onMounted(async () => {
   await loadPrivacySetting()

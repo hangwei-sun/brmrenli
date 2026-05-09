@@ -11,6 +11,12 @@
             <el-tag :type="item.saved ? 'success' : 'warning'" size="small">
               {{ item.saved ? '已保存' : '待保存' }}
             </el-tag>
+            <el-tag v-if="item._rosterMatch === 'exact' || item._rosterMatch === 'exact_dept'" type="success" size="small" effect="plain">
+              花名册匹配
+            </el-tag>
+            <el-tag v-else-if="item._rosterMatch === 'ambiguous'" type="warning" size="small" effect="plain">
+              多人同名
+            </el-tag>
             <span class="title-text">
               <strong>{{ item.applicant || '(未识别)' }}</strong>
               - {{ item.leave_type || '未知类型' }}

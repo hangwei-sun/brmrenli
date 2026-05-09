@@ -190,9 +190,66 @@
 import { ref, reactive } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import OcrPreview from './OcrPreview.vue'
-import { openImages, readImage, copyImage, recognizeOcr, insertRecord, saveBase64Image } from '../utils/api.js'
+import { openImages, readImage, copyImage, recognizeOcr, insertRecord, saveBase64Image, getAllEmployees } from '../utils/api.js'
 
 const emit = defineEmits(['recognized'])
+
+// 员工花名册缓存（用于OCR匹配）
+let employeeCache = null
+
+async function loadEmployeeCache() {
+  if (!employeeCache) {
+    try {
+      employeeCache = await getAllEmployees()
+    } catch {
+      employeeCache = []
+    }
+  }
+  return employeeCache
+}
+
+function clearEmployeeCache() {
+  employeeCache = null
+}
+
+async function matchOcrResultToRoster(ocrItem) {
+  const applicant = (ocrItem.applicant || '').trim()
+  if (!applicant) return
+
+  try {
+    const employees = await loadEmployeeCache()
+
+    const exactMatches = employees.filter(e => (e.name || '').trim() === applicant)
+
+    if (exactMatches.length === 1) {
+      const emp = exactMatches[0]
+      if (!ocrItem.department && emp.department) {
+        ocrItem.department = emp.department
+      }
+      ocrItem._rosterMatch = 'exact'
+      ocrItem._matchedEmployee = emp
+      return
+    }
+
+    if (exactMatches.length > 1) {
+      const ocrDept = (ocrItem.department || '').trim()
+      if (ocrDept) {
+        const deptMatches = exactMatches.filter(e => (e.department || '').trim() === ocrDept)
+        if (deptMatches.length === 1) {
+          ocrItem._rosterMatch = 'exact_dept'
+          ocrItem._matchedEmployee = deptMatches[0]
+          return
+        }
+      }
+      ocrItem._rosterMatch = 'ambiguous'
+      return
+    }
+
+    ocrItem._rosterMatch = 'not_found'
+  } catch {
+    // 匹配失败不影响OCR结果
+  }
+}
 
 const leaveTypes = [
   '年休假', '病假', '事假', '婚假', '丧假',
@@ -370,6 +427,7 @@ function removeImage(index) {
 function clearImages() {
   imageList.value = []
   ocrResults.value = []
+  clearEmployeeCache()
 }
 
 // 开始OCR识别
@@ -388,6 +446,7 @@ async function startOcr() {
   currentStep.value = 0
   currentProgress.value = 0
   ocrResults.value = []
+  clearEmployeeCache()
 
   try {
     currentStep.value = 1
@@ -412,6 +471,8 @@ async function startOcr() {
           imageName: img.name,
           saved: false
         })
+        // 匹配花名册：若申请人姓名匹配则自动补全部门
+        await matchOcrResultToRoster(ocrResults.value[ocrResults.value.length - 1])
       } else {
         ElMessage.error('识别 ' + img.name + ' 失败: ' + ocrResult.error)
       }
