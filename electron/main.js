@@ -4,6 +4,7 @@ const fs = require('fs')
 const Database = require('./database')
 const OcrEngine = require('./ocr')
 const SettingsStore = require('./settings')
+const BackupManager = require('./backup')
 
 // 判断是否为开发环境
 const isDev = process.env.NODE_ENV === 'development'
@@ -12,6 +13,7 @@ let mainWindow = null
 let db = null
 let ocr = null
 let settings = null
+let backupManager = null
 
 // 创建主窗口
 function createWindow() {
@@ -64,6 +66,9 @@ async function initializeServices() {
   // 初始化设置存储
   settings = new SettingsStore(userDataPath)
   ocr.updateSettings(settings.getAll())
+
+  // 初始化备份管理器
+  backupManager = new BackupManager(userDataPath, db)
 }
 
 // ==================== IPC 事件处理 ====================
@@ -330,6 +335,38 @@ ipcMain.handle('db:getBirthdayStats', async () => {
   return db.getBirthdayStats()
 })
 
+// 测试百度千帆 PaddleOCR-VL API连接
+ipcMain.handle('settings:testPaddleOcr', async (event, { apiKey }) => {
+  try {
+    const response = await fetch('https://qianfan.baidubce.com/v2/ocr/paddleocr', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'paddleocr-vl-0.9b',
+        file: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        fileType: 1
+      })
+    })
+    if (response.ok) {
+      return { success: true, message: 'API连接成功，密钥验证通过' }
+    }
+    const errText = await response.text().catch(() => '')
+    let errMsg = errText
+    try {
+      errMsg = JSON.parse(errText).error?.message || errText
+    } catch {}
+    if (errMsg.includes('auth') || errMsg.includes('key') || errMsg.includes('token') || errMsg.includes('unauthorized')) {
+      return { success: false, error: '密钥验证失败，请检查API Key是否正确' }
+    }
+    return { success: false, error: `连接失败: ${errMsg}` }
+  } catch (err) {
+    return { success: false, error: `连接失败: ${err.message}` }
+  }
+})
+
 // 测试智谱AI GLM API连接
 ipcMain.handle('settings:testGlm', async (event, { apiKey }) => {
   try {
@@ -361,6 +398,59 @@ ipcMain.handle('settings:testGlm', async (event, { apiKey }) => {
     return { success: false, error: `连接失败: ${errMsg}` }
   } catch (err) {
     return { success: false, error: `连接失败: ${err.message}` }
+  }
+})
+
+// ==================== 备份与同步 ====================
+
+// 导出备份
+ipcMain.handle('backup:export', async () => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出数据备份',
+      defaultPath: `请假数据备份_${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }]
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+
+    const buffer = backupManager.createBackup()
+    fs.writeFileSync(result.filePath, buffer)
+    return { success: true, filePath: result.filePath }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+// 导入备份
+ipcMain.handle('backup:import', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择备份文件',
+      filters: [{ name: 'ZIP 压缩包', extensions: ['zip'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true }
+
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: '确认导入备份',
+      message: '导入备份将完全替换当前所有数据（请假记录、员工花名册、图片），此操作不可撤销。',
+      detail: '建议先导出一份当前数据的备份。',
+      buttons: ['取消', '确定导入'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return { success: false, canceled: true }
+
+    const restoreResult = await backupManager.restore(result.filePaths[0])
+
+    // 重新加载设置到 settings store
+    if (settings) settings.load()
+    if (ocr) ocr.updateSettings(settings.getAll())
+
+    return restoreResult
+  } catch (err) {
+    return { success: false, error: err.message }
   }
 })
 

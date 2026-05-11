@@ -70,16 +70,7 @@
         <el-table-column prop="days" label="天数" width="60" align="center" sortable="custom" />
         <el-table-column prop="apply_date" label="申请日期" width="110" />
         <el-table-column prop="cancel_date" label="销假日期" width="110" />
-        <el-table-column prop="ocr_confidence" label="置信度" width="90" align="center">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="row.ocr_confidence || 0"
-              :stroke-width="6"
-              :show-text="true"
-              :color="row.ocr_confidence > 80 ? '#67c23a' : row.ocr_confidence > 50 ? '#e6a23c' : '#f56c6c'"
-            />
-          </template>
-        </el-table-column>
+
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
         <el-table-column prop="created_at" label="创建时间" width="160" />
 

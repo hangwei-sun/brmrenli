@@ -319,6 +319,8 @@ class LeaveDatabase {
         department TEXT,
         position TEXT,
         employment_type TEXT,
+        seq_number INTEGER DEFAULT 0,
+        category_seq INTEGER DEFAULT 0,
         remark TEXT,
         created_at DATETIME DEFAULT (datetime('now', 'localtime'))
       )
@@ -334,7 +336,9 @@ class LeaveDatabase {
     const migrations = [
       { name: 'position', sql: 'ALTER TABLE employees ADD COLUMN position TEXT' },
       { name: 'employment_type', sql: 'ALTER TABLE employees ADD COLUMN employment_type TEXT' },
-      { name: 'remark', sql: 'ALTER TABLE employees ADD COLUMN remark TEXT' }
+      { name: 'remark', sql: 'ALTER TABLE employees ADD COLUMN remark TEXT' },
+      { name: 'seq_number', sql: 'ALTER TABLE employees ADD COLUMN seq_number INTEGER DEFAULT 0' },
+      { name: 'category_seq', sql: 'ALTER TABLE employees ADD COLUMN category_seq INTEGER DEFAULT 0' }
     ]
 
     for (const m of migrations) {
@@ -348,8 +352,8 @@ class LeaveDatabase {
   // 插入单个员工
   insertEmployee(record) {
     this._run(`
-      INSERT INTO employees (name, phone, id_number, department, position, employment_type, remark)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO employees (name, phone, id_number, department, position, employment_type, seq_number, category_seq, remark)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       record.name || '',
       record.phone || '',
@@ -357,6 +361,8 @@ class LeaveDatabase {
       record.department || '',
       record.position || '',
       record.employment_type || '',
+      record.seq_number || 0,
+      record.category_seq || 0,
       record.remark || ''
     ])
     const result = this._queryOne('SELECT last_insert_rowid() as id')
@@ -403,7 +409,7 @@ class LeaveDatabase {
     this._run(`
       UPDATE employees SET
         name = ?, phone = ?, id_number = ?, department = ?,
-        position = ?, employment_type = ?, remark = ?
+        position = ?, employment_type = ?, seq_number = ?, category_seq = ?, remark = ?
       WHERE id = ?
     `, [
       record.name || '',
@@ -412,6 +418,8 @@ class LeaveDatabase {
       record.department || '',
       record.position || '',
       record.employment_type || '',
+      record.seq_number || 0,
+      record.category_seq || 0,
       record.remark || '',
       id
     ])

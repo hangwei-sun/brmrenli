@@ -1,5 +1,22 @@
 <template>
   <div class="image-upload">
+    <!-- 使用说明 -->
+    <el-alert
+      title="使用说明"
+      type="info"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 16px"
+    >
+      <template #default>
+        <ul style="margin: 4px 0; padding-left: 20px; line-height: 1.8">
+          <li>支持拖拽或点击上传请假条图片（JPG/PNG/BMP/TIFF/WebP）</li>
+          <li>OCR引擎会自动识别请假条中的关键字段信息</li>
+          <li><strong style="color: #f56c6c">上传识别的内容需要手动确定准确性，请仔细核对后保存</strong></li>
+        </ul>
+      </template>
+    </el-alert>
+
     <!-- 上传区域 -->
     <el-card class="section-card">
       <template #header>

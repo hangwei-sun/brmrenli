@@ -53,20 +53,12 @@
               <el-row :gutter="12">
                 <el-col :span="12">
                   <el-form-item label="申请人">
-                    <el-input v-model="item.applicant" @change="emitUpdate(index, 'applicant', $event)">
-                      <template #append>
-                        <span class="confidence-stars">{{ getStars(item.fieldConfidence?.applicant) }}</span>
-                      </template>
-                    </el-input>
+                    <el-input v-model="item.applicant" @change="emitUpdate(index, 'applicant', $event)" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
                   <el-form-item label="部门">
-                    <el-input v-model="item.department" @change="emitUpdate(index, 'department', $event)">
-                      <template #append>
-                        <span class="confidence-stars">{{ getStars(item.fieldConfidence?.department) }}</span>
-                      </template>
-                    </el-input>
+                    <el-input v-model="item.department" @change="emitUpdate(index, 'department', $event)" />
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -74,11 +66,7 @@
               <el-row :gutter="12">
                 <el-col :span="12">
                   <el-form-item label="代办人">
-                    <el-input v-model="item.agent" @change="emitUpdate(index, 'agent', $event)">
-                      <template #append>
-                        <span class="confidence-stars">{{ getStars(item.fieldConfidence?.agent) }}</span>
-                      </template>
-                    </el-input>
+                    <el-input v-model="item.agent" @change="emitUpdate(index, 'agent', $event)" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
@@ -86,7 +74,7 @@
                     <el-select v-model="item.leave_type" @change="emitUpdate(index, 'leave_type', $event)" style="width:100%">
                       <el-option v-for="t in leaveTypes" :key="t" :label="t" :value="t" />
                     </el-select>
-                    <span class="confidence-stars" style="margin-left:8px">{{ getStars(item.fieldConfidence?.leave_type) }}</span>
+
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -101,7 +89,6 @@
                       @change="emitUpdate(index, 'start_date', $event)"
                       style="width:100%"
                     />
-                    <span class="confidence-stars">{{ getStars(item.fieldConfidence?.start_date) }}</span>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
@@ -113,7 +100,6 @@
                       @change="emitUpdate(index, 'end_date', $event)"
                       style="width:100%"
                     />
-                    <span class="confidence-stars">{{ getStars(item.fieldConfidence?.end_date) }}</span>
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -122,7 +108,6 @@
                 <el-col :span="12">
                   <el-form-item label="天数">
                     <el-input-number v-model="item.days" :min="1" :max="365" @change="emitUpdate(index, 'days', $event)" style="width:100%" />
-                    <span class="confidence-stars">{{ getStars(item.fieldConfidence?.days) }}</span>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
@@ -146,6 +131,7 @@
                   readonly
                   style="font-size: 12px; color: #909399"
                 />
+                <p style="color: #f56c6c; font-size: 12px; margin-top: 4px">上传识别的内容需要手动确定准确性</p>
               </el-form-item>
 
               <!-- OCR提取详情 -->
@@ -214,13 +200,6 @@ const fieldMap = {
   days: '天数', apply_date: '申请日期', cancel_date: '销假日期'
 }
 
-function getStars(confidence) {
-  if (confidence >= 3) return '★★★ 高精度'
-  if (confidence >= 2) return '★★☆ 中等'
-  if (confidence >= 1) return '★☆☆ 低精度'
-  return '☆☆☆ 需确认'
-}
-
 // 检查是否有空间位置匹配
 function hasSpatialMatch(item) {
   if (!item.extractedWords) return false
@@ -241,6 +220,9 @@ function emitUpdate(index, field, value) {
   align-items: center;
   gap: 12px;
   width: 100%;
+  background: #f0f5ff;
+  padding: 8px 12px;
+  border-radius: 6px;
 }
 
 .title-text {
@@ -283,11 +265,6 @@ function emitUpdate(index, field, value) {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #ebeef5;
-}
-
-.confidence-stars {
-  color: #e6a23c;
-  font-size: 12px;
 }
 
 .extraction-detail {

@@ -24,7 +24,7 @@
     <!-- 主体内容区 -->
     <el-main class="app-main">
       <el-tabs v-model="activeTab" type="border-card" class="main-tabs">
-        <el-tab-pane lazy>
+        <el-tab-pane name="upload" lazy>
           <template #label>
             <span class="tab-label">
               <el-icon><Upload /></el-icon> 上传识别
@@ -33,7 +33,7 @@
           <ImageUpload @recognized="handleRecognized" />
         </el-tab-pane>
 
-        <el-tab-pane lazy>
+        <el-tab-pane name="data" lazy>
           <template #label>
             <span class="tab-label">
               <el-icon><List /></el-icon> 数据管理
@@ -183,7 +183,7 @@
     </el-dialog>
 
     <!-- 设置对话框 -->
-    <SettingsDialog v-model="settingsVisible" @themeChanged="applyTheme" @settingsSaved="onSettingsSaved" />
+    <SettingsDialog v-model="settingsVisible" @themeChanged="applyTheme" @settingsSaved="onSettingsSaved" @backupRestored="handleBackupRestored" />
   </el-container>
 </template>
 
@@ -210,8 +210,9 @@ const currentEngine = ref('tesseract')
 
 const engineLabel = computed(() => {
   switch (currentEngine.value) {
-    case 'glm-ocr': return 'GLM-OCR'
-    case 'glm': return 'GLM-4.6V'
+    case 'glm-ocr': return '通道2'
+    case 'glm': return '通道1'
+    case 'paddle': return '通道3'
     case 'tencent': return '腾讯云OCR'
     default: return 'Tesseract OCR'
   }
@@ -221,6 +222,7 @@ const engineTagType = computed(() => {
   switch (currentEngine.value) {
     case 'glm-ocr': return 'success'
     case 'glm': return ''
+    case 'paddle': return 'primary'
     case 'tencent': return ''
     default: return 'info'
   }
@@ -362,6 +364,15 @@ async function loadTheme() {
       currentEngine.value = settings.ocrEngine || 'tesseract'
     }
   } catch { /* ignore */ }
+}
+
+// 备份恢复后回调 — 重新加载所有数据
+async function handleBackupRestored() {
+  await loadRecords()
+  loadTheme()
+  if (birthdayRef.value) {
+    birthdayRef.value.refresh()
+  }
 }
 
 // 设置保存后回调

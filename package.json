@@ -1,6 +1,6 @@
 {
   "name": "leave-management",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "包融媒人力智慧管理系统 - 包头市融媒体中心",
   "main": "electron/main.js",
   "scripts": {
@@ -46,6 +46,7 @@
     ]
   },
   "dependencies": {
+    "adm-zip": "^0.5.17",
     "sharp": "^0.34.5",
     "sql.js": "^1.11.0",
     "tencentcloud-sdk-nodejs-ocr": "^4.1.226",

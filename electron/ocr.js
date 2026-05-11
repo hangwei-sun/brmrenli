@@ -151,6 +151,9 @@ class OcrEngine {
     if (engine === 'glm-ocr' && this.settings?.glmApiKey) {
       return this.recognizeWithGlmOcr(imagePath)
     }
+    if (engine === 'paddle' && this.settings?.paddleOcrApiKey) {
+      return this.recognizeWithPaddleOcr(imagePath)
+    }
     return this.recognizeWithTesseract(imagePath)
   }
 
@@ -504,6 +507,108 @@ class OcrEngine {
       fullText: this.filterFullText(fullText),
       confidence: avgConfidence,
       engine: 'glm-ocr',
+      ...extracted
+    }
+  }
+
+  // ============ 百度千帆 PaddleOCR-VL ============
+  async recognizeWithPaddleOcr(imagePath) {
+    if (!this.settings?.paddleOcrApiKey) {
+      throw new Error('请先在设置中配置百度千帆API Key')
+    }
+
+    const imageBuffer = fs.readFileSync(imagePath)
+    const base64 = imageBuffer.toString('base64')
+
+    const response = await fetch('https://qianfan.baidubce.com/v2/ocr/paddleocr', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.settings.paddleOcrApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'paddleocr-vl-0.9b',
+        file: base64,
+        fileType: 1,
+        useChartRecognition: true,
+        useDocUnwarping: true,
+        useLayoutDetection: true,
+        layoutNms: true,
+        temperature: 0,
+        topP: 1.0
+      })
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '')
+      let errMsg
+      try {
+        errMsg = JSON.parse(errText).error?.message || errText
+      } catch {
+        errMsg = errText || `HTTP ${response.status}`
+      }
+      throw new Error(`PaddleOCR-VL调用失败: ${errMsg}`)
+    }
+
+    const result = await response.json()
+
+    // 解析版面结果
+    const layoutResults = result.result?.layoutParsingResults
+    let allElements = []
+
+    if (layoutResults && layoutResults.length > 0) {
+      const lr = layoutResults[0]
+      // 从 parsing_res_list 提取文本块
+      if (lr.parsing_res_list && Array.isArray(lr.parsing_res_list)) {
+        for (const block of lr.parsing_res_list) {
+          const text = block.block_content || ''
+          if (text.trim()) {
+            allElements.push({
+              text: text.trim(),
+              confidence: 90,
+              bbox: Array.isArray(block.block_bbox) && block.block_bbox.length === 4
+                ? { x0: block.block_bbox[0], y0: block.block_bbox[1], x1: block.block_bbox[2], y1: block.block_bbox[3] }
+                : { x0: 0, y0: allElements.length * 30, x1: 100, y1: allElements.length * 30 + 30 }
+            })
+          }
+        }
+      }
+      // 回退: 从 markdown 文本提取
+      if (allElements.length === 0 && lr.markdown?.text) {
+        lr.markdown.text.split('\n').filter(l => l.trim())
+          .forEach((line, i) => {
+            allElements.push({ text: line.trim(), confidence: 80, bbox: { x0: 0, y0: i * 30, x1: 100, y1: i * 30 + 30 } })
+          })
+      }
+    }
+
+    if (allElements.length === 0) {
+      throw new Error('PaddleOCR-VL未检测到文字，请确认图片清晰度')
+    }
+
+    const words = allElements.map((el, idx) => ({
+      text: el.text,
+      confidence: el.confidence,
+      bbox: el.bbox
+    }))
+
+    const fullText = words.map(w => w.text).join('\n')
+    const avgConfidence = Math.round(words.reduce((s, w) => s + w.confidence, 0) / words.length)
+
+    const filteredWords = words.filter(w => !this.isPrintedText(w.text))
+    const lines = this.groupWordsByLines(filteredWords.length > 0 ? filteredWords : words)
+    const extracted = this.extractFieldsWithSpatialAnalysis({
+      text: fullText,
+      confidence: avgConfidence,
+      words: filteredWords.length > 0 ? filteredWords : words,
+      lines,
+      blocks: []
+    })
+
+    return {
+      fullText: this.filterFullText(fullText),
+      confidence: avgConfidence,
+      engine: 'paddle',
       ...extracted
     }
   }

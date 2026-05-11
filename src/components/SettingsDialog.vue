@@ -13,16 +13,16 @@
         <el-form label-width="120px" label-position="left">
           <el-form-item label="识别引擎">
             <el-radio-group v-model="form.ocrEngine">
-              <el-radio value="glm-ocr">GLM-OCR (云端/专业OCR/低成本)</el-radio>
-              <el-radio value="glm">GLM-4.6V (云端/高精度)</el-radio>
+              <el-radio value="glm">通道1 — GLM-4.6V (智谱AI视觉大模型/高精度)</el-radio>
+              <el-radio value="glm-ocr">通道2 — GLM-OCR (智谱AI专业OCR/低成本)</el-radio>
+              <el-radio value="paddle">通道3 — PaddleOCR-VL (百度千帆/版面分析)</el-radio>
               <el-radio value="tesseract">Tesseract (本地/免费)</el-radio>
-              <el-radio value="tencent">腾讯云OCR (云端/付费)</el-radio>
             </el-radio-group>
             <div class="form-hint">
-              <span v-if="form.ocrEngine === 'glm-ocr'">智谱AI专业OCR模型，版面分析+精准定位，成本约为传统OCR的1/10</span>
-              <span v-else-if="form.ocrEngine === 'glm'">智谱AI大模型，手写体识别率约90-98%，自动忽略印刷体</span>
-              <span v-else-if="form.ocrEngine === 'tesseract'">使用本地Tesseract引擎，无需联网，手写体识别率约50-65%</span>
-              <span v-else>使用腾讯云手写体识别API，需要联网，每月1000次免费额度</span>
+              <span v-if="form.ocrEngine === 'glm'">通道1：智谱AI GLM-4.6V 视觉大模型，手写体识别率约90-98%，自动忽略印刷体</span>
+              <span v-else-if="form.ocrEngine === 'glm-ocr'">通道2：智谱AI专业OCR模型，版面分析+精准定位，成本约为传统OCR的1/10</span>
+              <span v-else-if="form.ocrEngine === 'paddle'">通道3：百度千帆 PaddleOCR-VL，文档版面解析，支持图表识别</span>
+              <span v-else>使用本地Tesseract引擎，无需联网，手写体识别率约50-65%</span>
             </div>
           </el-form-item>
 
@@ -41,6 +41,25 @@
               </el-button>
               <span v-if="testGlmResult" :class="testGlmResult.success ? 'text-success' : 'text-error'" style="margin-left:12px">
                 {{ testGlmResult.message || testGlmResult.error }}
+              </span>
+            </el-form-item>
+          </template>
+
+          <template v-if="form.ocrEngine === 'paddle'">
+            <el-divider content-position="left">百度千帆 API配置</el-divider>
+            <el-form-item label="API Key">
+              <el-input v-model="form.paddleOcrApiKey" placeholder="请输入百度千帆API Key" show-password type="password" />
+              <div class="form-hint">
+                获取方式：访问 <a href="#" @click.prevent="openPaddleUrl">console.bce.baidu.com/qianfan</a> 在应用接入中创建API Key
+              </div>
+            </el-form-item>
+            <el-form-item label="">
+              <el-button @click="testPaddleOcrApi" :loading="testingPaddle">
+                <el-icon><Connection /></el-icon>
+                测试连接
+              </el-button>
+              <span v-if="testPaddleResult" :class="testPaddleResult.success ? 'text-success' : 'text-error'" style="margin-left:12px">
+                {{ testPaddleResult.message || testPaddleResult.error }}
               </span>
             </el-form-item>
           </template>
@@ -117,6 +136,32 @@
         </el-form>
       </el-tab-pane>
 
+      <!-- 数据备份与同步 -->
+      <el-tab-pane label="数据备份与同步" name="backup">
+        <el-form label-width="100px" label-position="left">
+          <el-form-item label="本地备份">
+            <div class="form-hint" style="margin-bottom:12px">将数据库、图片和设置打包为 .zip 文件。可用于 U盘传输、局域网共享，或放入坚果云/OneDrive 等云同步文件夹中实现多机自动同步。</div>
+            <div style="display:flex; gap:12px">
+              <el-button type="primary" @click="handleExportBackup" :loading="exporting">
+                <el-icon><Download /></el-icon> 导出备份
+              </el-button>
+              <el-button type="warning" @click="handleImportBackup" :loading="importing">
+                <el-icon><Upload /></el-icon> 导入备份
+              </el-button>
+            </div>
+            <div v-if="backupMessage" style="margin-top:12px">
+              <el-alert
+                :title="backupMessage"
+                :type="backupSuccess ? 'success' : 'error'"
+                :closable="true"
+                show-icon
+                @close="backupMessage = ''"
+              />
+            </div>
+          </el-form-item>
+        </el-form>
+      </el-tab-pane>
+
       <!-- 关于 -->
       <el-tab-pane label="关于" name="about">
         <div class="about-section">
@@ -130,7 +175,7 @@
           <p>开发部门：数智化发展部</p>
           <el-divider />
           <p class="about-tech">Electron + Vue 3 + Element Plus + Tesseract.js</p>
-          <p class="about-tech">GLM-4.6V-Flash · 腾讯云OCR · SQLite · ECharts</p>
+          <p class="about-tech">通道1 GLM-4.6V · 通道2 GLM-OCR · 通道3 PaddleOCR-VL · SQLite · ECharts</p>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -145,25 +190,33 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
+import { exportBackup, importBackup } from '../utils/api.js'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:modelValue', 'themeChanged', 'settingsSaved'])
+const emit = defineEmits(['update:modelValue', 'themeChanged', 'settingsSaved', 'backupRestored'])
 
 const visible = ref(false)
 const activeTab = ref('ocr')
 const testing = ref(false)
+const exporting = ref(false)
+const importing = ref(false)
+const backupMessage = ref('')
+const backupSuccess = ref(false)
 const testingGlm = ref(false)
+const testingPaddle = ref(false)
 const saving = ref(false)
 const testResult = ref(null)
 const testGlmResult = ref(null)
+const testPaddleResult = ref(null)
 const appVersion = ref(__APP_VERSION__)
 
 const form = reactive({
   ocrEngine: 'tesseract',
   glmApiKey: '',
+  paddleOcrApiKey: '',
   tencentSecretId: '',
   tencentSecretKey: '',
   tencentRegion: 'ap-guangzhou',
@@ -187,6 +240,7 @@ async function loadSettings() {
       Object.assign(form, {
         ocrEngine: settings.ocrEngine || 'tesseract',
         glmApiKey: settings.glmApiKey || '',
+        paddleOcrApiKey: settings.paddleOcrApiKey || '',
         tencentSecretId: settings.tencentSecretId || '',
         tencentSecretKey: settings.tencentSecretKey || '',
         tencentRegion: settings.tencentRegion || 'ap-guangzhou',
@@ -208,6 +262,7 @@ async function saveSettings() {
     const settings = {
       ocrEngine: form.ocrEngine,
       glmApiKey: form.glmApiKey,
+      paddleOcrApiKey: form.paddleOcrApiKey,
       tencentSecretId: form.tencentSecretId,
       tencentSecretKey: form.tencentSecretKey,
       tencentRegion: form.tencentRegion,
@@ -282,9 +337,86 @@ function openGlmUrl() {
   window.open('https://open.bigmodel.cn', '_blank')
 }
 
+// 打开百度千帆控制台
+function openPaddleUrl() {
+  window.open('https://console.bce.baidu.com/qianfan', '_blank')
+}
+
+// 测试百度千帆 PaddleOCR-VL连接
+async function testPaddleOcrApi() {
+  if (!form.paddleOcrApiKey) {
+    ElMessage.warning('请先输入API Key')
+    return
+  }
+  testingPaddle.value = true
+  testPaddleResult.value = null
+  try {
+    const result = await window.electronAPI.testPaddleOcrApi({ apiKey: form.paddleOcrApiKey })
+    testPaddleResult.value = result
+    if (result.success) {
+      ElMessage.success('连接测试通过')
+    } else {
+      ElMessage.error(result.error || '连接测试失败')
+    }
+  } catch (err) {
+    testPaddleResult.value = { success: false, error: err.message }
+  } finally {
+    testingPaddle.value = false
+  }
+}
+
 // 主题切换即时预览
 function onThemeChange(value) {
   emit('themeChanged', value)
+}
+
+// 导出备份
+async function handleExportBackup() {
+  exporting.value = true
+  backupMessage.value = ''
+  try {
+    const result = await exportBackup()
+    if (result.canceled) return
+    if (result.success) {
+      backupSuccess.value = true
+      backupMessage.value = `备份已保存到：${result.filePath}`
+      ElMessage.success('备份导出成功')
+    } else {
+      backupSuccess.value = false
+      backupMessage.value = result.error || '导出失败'
+      ElMessage.error(result.error || '导出失败')
+    }
+  } catch (err) {
+    backupSuccess.value = false
+    backupMessage.value = err.message
+  } finally {
+    exporting.value = false
+  }
+}
+
+// 导入备份
+async function handleImportBackup() {
+  importing.value = true
+  backupMessage.value = ''
+  try {
+    const result = await importBackup()
+    if (result.canceled) return
+    if (result.success) {
+      backupSuccess.value = true
+      backupMessage.value = result.message || '数据已成功恢复'
+      ElMessage.success('数据已成功恢复，请查看各页面确认数据完整性')
+      emit('backupRestored')
+    } else {
+      backupSuccess.value = false
+      backupMessage.value = result.error || '导入失败'
+      ElMessage.error(result.error || '导入失败')
+    }
+  } catch (err) {
+    backupSuccess.value = false
+    backupMessage.value = err.message
+  } finally {
+    importing.value = false
+  }
 }
 </script>
 

@@ -51,5 +51,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
   updateAllSettings: (newSettings) => ipcRenderer.invoke('settings:updateAll', newSettings),
   testTencentApi: (config) => ipcRenderer.invoke('settings:testTencent', config),
-  testGlmApi: (config) => ipcRenderer.invoke('settings:testGlm', config)
+  testGlmApi: (config) => ipcRenderer.invoke('settings:testGlm', config),
+  testPaddleOcrApi: (config) => ipcRenderer.invoke('settings:testPaddleOcr', config),
+
+  // 备份与同步
+  exportBackup: () => ipcRenderer.invoke('backup:export'),
+  importBackup: () => ipcRenderer.invoke('backup:import')
 })

@@ -13,6 +13,9 @@ const DEFAULT_SETTINGS = {
   // 智谱AI GLM-4.6V-Flash配置
   glmApiKey: '',
 
+  // 百度千帆 PaddleOCR-VL配置
+  paddleOcrApiKey: '',
+
   // 主题: 'light' | 'dark' | 'system'
   theme: 'light',
 

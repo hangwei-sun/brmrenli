@@ -232,3 +232,17 @@ export async function getBirthdayStats() {
   if (!api) return []
   return api.getBirthdayStats()
 }
+
+// ============ 备份与同步 ============
+
+export async function exportBackup() {
+  const api = getAPI()
+  if (!api) return { success: false, error: '仅支持Electron环境' }
+  return api.exportBackup()
+}
+
+export async function importBackup() {
+  const api = getAPI()
+  if (!api) return { success: false, error: '仅支持Electron环境' }
+  return api.importBackup()
+}

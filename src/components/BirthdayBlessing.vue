@@ -123,6 +123,8 @@
         max-height="500"
       >
         <el-table-column type="selection" width="45" />
+        <el-table-column prop="seq_number" label="总序号" width="80" align="center" />
+        <el-table-column prop="category_seq" label="分类序号" width="80" align="center" />
         <el-table-column prop="name" label="姓名" width="100" />
         <el-table-column label="电话" width="140">
           <template #default="{ row }">
@@ -181,6 +183,18 @@
             <el-option label="聘用" value="聘用" />
           </el-select>
         </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="总序号">
+              <el-input-number v-model="manualForm.seq_number" :min="0" :max="9999" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="分类序号">
+              <el-input-number v-model="manualForm.category_seq" :min="0" :max="9999" style="width:100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="备注">
           <el-input v-model="manualForm.remark" type="textarea" :rows="2" placeholder="可选备注" />
         </el-form-item>
@@ -260,6 +274,8 @@ const manualForm = reactive({
   department: '',
   position: '',
   employment_type: '',
+  seq_number: 0,
+  category_seq: 0,
   remark: ''
 })
 
@@ -398,9 +414,11 @@ async function doImport() {
       const department = row['部门'] || row['department'] || row['所在部门'] || row['所属部门'] || ''
       const position = row['职务'] || row['position'] || row['职位'] || ''
       const employmentType = row['在编/聘用'] || row['employment_type'] || row['用工性质'] || ''
+      const seqNumber = parseInt(row['总序号']) || parseInt(row['seq_number']) || 0
+      const categorySeq = parseInt(row['分类序号']) || parseInt(row['category_seq']) || 0
       const remark = row['备注'] || row['remark'] || row['note'] || ''
       if (idNumber && name) {
-        records.push({ name, phone, id_number: idNumber.trim(), department, position, employment_type: employmentType.trim(), remark })
+        records.push({ name, phone, id_number: idNumber.trim(), department, position, employment_type: employmentType.trim(), seq_number: seqNumber, category_seq: categorySeq, remark })
       }
     })
     if (records.length === 0) {
@@ -437,8 +455,8 @@ function readExcelFile(file) {
 }
 
 function downloadTemplate() {
-  const header = ['姓名', '电话', '身份证号', '部门', '职务', '在编/聘用', '备注']
-  const sample = ['张三', '13800138000', '110101199001011234', '融媒体中心', '主任编辑', '在编', '']
+  const header = ['姓名', '电话', '身份证号', '部门', '职务', '在编/聘用', '总序号', '分类序号', '备注']
+  const sample = ['张三', '13800138000', '110101199001011234', '融媒体中心', '主任编辑', '在编', 1, 1, '']
   const ws = XLSX.utils.aoa_to_sheet([header, sample])
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '员工信息')
@@ -473,6 +491,8 @@ function openManualDialog() {
   manualForm.department = ''
   manualForm.position = ''
   manualForm.employment_type = ''
+  manualForm.seq_number = 0
+  manualForm.category_seq = 0
   manualForm.remark = ''
   manualDialogVisible.value = true
 }
@@ -502,7 +522,7 @@ function exportBirthdayList() {
     ElMessage.warning('暂无生日员工可导出')
     return
   }
-  const header = ['姓名', '电话', '身份证号', '出生日期', '部门', '职务', '在编/聘用', '备注']
+  const header = ['姓名', '电话', '身份证号', '出生日期', '部门', '职务', '在编/聘用', '总序号', '分类序号', '备注']
   const rows = birthdayList.value.map(emp => [
     emp.name || '',
     emp.phone || '',
@@ -511,6 +531,8 @@ function exportBirthdayList() {
     emp.department || '',
     emp.position || '',
     emp.employment_type || '',
+    emp.seq_number || 0,
+    emp.category_seq || 0,
     emp.remark || ''
   ])
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
