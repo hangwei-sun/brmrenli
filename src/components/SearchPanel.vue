@@ -120,7 +120,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
-import { getAllRecords, searchRecords } from '../utils/api.js'
+import { getAllRecords, searchRecords, getDistinctDepartments } from '../utils/api.js'
 
 const emit = defineEmits(['search', 'export'])
 
@@ -140,15 +140,11 @@ const searchForm = reactive({
   end_date_range: null
 })
 
-// 加载部门列表
+// 加载部门列表（从职工名单中读取）
 async function loadDepartments() {
   try {
-    const records = await getAllRecords()
-    const depts = new Set()
-    records.forEach(r => {
-      if (r.department) depts.add(r.department)
-    })
-    departmentList.value = Array.from(depts).sort()
+    const deps = await getDistinctDepartments()
+    departmentList.value = deps || []
   } catch {
     // ignore
   }

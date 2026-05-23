@@ -167,6 +167,18 @@ export async function getAllEmployees() {
   return api.getAllEmployees()
 }
 
+export async function getActiveEmployees() {
+  const api = getAPI()
+  if (!api) return []
+  return api.getActiveEmployees()
+}
+
+export async function getDistinctDepartments() {
+  const api = getAPI()
+  if (!api) return []
+  return api.getDistinctDepartments()
+}
+
 export async function insertEmployee(record) {
   const api = getAPI()
   if (!api) throw new Error('浏览器模式不支持数据操作')

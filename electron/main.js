@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 const Database = require('./database')
 const OcrEngine = require('./ocr')
 const SettingsStore = require('./settings')
@@ -291,6 +292,14 @@ ipcMain.handle('db:getAllEmployees', async () => {
   return db.getAllEmployees()
 })
 
+ipcMain.handle('db:getActiveEmployees', async () => {
+  return db.getActiveEmployees()
+})
+
+ipcMain.handle('db:getDistinctDepartments', async () => {
+  return db.getDistinctDepartments()
+})
+
 ipcMain.handle('db:insertEmployee', async (event, record) => {
   return db.insertEmployee(record)
 })
@@ -335,19 +344,21 @@ ipcMain.handle('db:getBirthdayStats', async () => {
   return db.getBirthdayStats()
 })
 
-// 测试百度千帆 PaddleOCR-VL API连接
-ipcMain.handle('settings:testPaddleOcr', async (event, { apiKey }) => {
+// 测试阿里云百炼 DashScope API连接
+ipcMain.handle('settings:testDashScope', async (event, { apiKey }) => {
   try {
-    const response = await fetch('https://qianfan.baidubce.com/v2/ocr/paddleocr', {
+    const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'paddleocr-vl-0.9b',
-        file: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        fileType: 1
+        model: 'qwen-vl-plus-2025-05-07',
+        messages: [
+          { role: 'user', content: '你好，请回复"连接成功"' }
+        ],
+        max_tokens: 10
       })
     })
     if (response.ok) {
@@ -358,7 +369,7 @@ ipcMain.handle('settings:testPaddleOcr', async (event, { apiKey }) => {
     try {
       errMsg = JSON.parse(errText).error?.message || errText
     } catch {}
-    if (errMsg.includes('auth') || errMsg.includes('key') || errMsg.includes('token') || errMsg.includes('unauthorized')) {
+    if (errMsg.includes('auth') || errMsg.includes('key') || errMsg.includes('token') || errMsg.includes('unauthorized') || errMsg.includes('InvalidApiKey')) {
       return { success: false, error: '密钥验证失败，请检查API Key是否正确' }
     }
     return { success: false, error: `连接失败: ${errMsg}` }
@@ -399,6 +410,41 @@ ipcMain.handle('settings:testGlm', async (event, { apiKey }) => {
   } catch (err) {
     return { success: false, error: `连接失败: ${err.message}` }
   }
+})
+
+// ==================== 登录密码管理 ====================
+
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex')
+}
+
+ipcMain.handle('password:set', async (event, password) => {
+  const hashed = hashPassword(password)
+  settings.set('loginPassword', hashed)
+  return true
+})
+
+ipcMain.handle('password:verify', async (event, password) => {
+  const stored = settings.get('loginPassword')
+  if (!stored) return true
+  return hashPassword(password) === stored
+})
+
+ipcMain.handle('password:isSet', async () => {
+  const stored = settings.get('loginPassword')
+  return !!stored
+})
+
+ipcMain.handle('password:setAdmin', async (event, password) => {
+  const hashed = password ? hashPassword(password) : ''
+  settings.set('adminPassword', hashed)
+  return true
+})
+
+ipcMain.handle('password:verifyAdmin', async (event, password) => {
+  const stored = settings.get('adminPassword')
+  if (!stored) return true
+  return hashPassword(password) === stored
 })
 
 // ==================== 备份与同步 ====================

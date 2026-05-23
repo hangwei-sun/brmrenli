@@ -17,6 +17,9 @@
             {{ engineLabel }}
           </el-tag>
         </el-badge>
+        <el-button type="warning" plain size="small" @click="employeeListVisible = true">
+          <el-icon><UserFilled /></el-icon> 职工名单
+        </el-button>
         <el-button circle :icon="Setting" @click="settingsVisible = true" title="系统设置" />
       </div>
     </el-header>
@@ -104,12 +107,16 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="申请人" prop="applicant">
-              <el-input v-model="editForm.applicant" placeholder="请输入申请人姓名" />
+              <el-select v-model="editForm.applicant" placeholder="请选择或输入申请人" clearable filterable allow-create style="width:100%" @change="onEditApplicantChange">
+                <el-option v-for="n in employeeNames" :key="n" :label="n" :value="n" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="所属部门">
-              <el-input v-model="editForm.department" placeholder="请输入部门" />
+              <el-select v-model="editForm.department" placeholder="请选择部门" clearable filterable style="width:100%">
+                <el-option v-for="d in departmentOptions" :key="d" :label="d" :value="d" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -175,11 +182,32 @@
         <el-form-item label="备注">
           <el-input v-model="editForm.remark" type="textarea" :rows="2" placeholder="备注信息" />
         </el-form-item>
+        <el-form-item label="请假条图片">
+          <div class="edit-image-area" @click="editFileInput?.click()">
+            <input ref="editFileInput" type="file" accept="image/*" @change="onEditImageChange" style="display:none" />
+            <template v-if="editImagePreview">
+              <img :src="editImagePreview" class="edit-image-preview" />
+              <el-icon class="edit-image-remove" @click.stop="removeEditImage" color="#f56c6c"><CircleCloseFilled /></el-icon>
+            </template>
+            <template v-else>
+              <el-icon :size="36" color="#c0c4cc"><Plus /></el-icon>
+              <p class="edit-image-hint">点击更换请假条图片（可选）</p>
+            </template>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveEdit">保存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 登录对话框 -->
+    <LoginDialog v-if="loginRequired || locked" :locked="locked" @unlocked="onUnlocked" />
+
+    <!-- 职工名单对话框 -->
+    <el-dialog v-model="employeeListVisible" title="职工名单" width="900px" :close-on-click-modal="false" destroy-on-close>
+      <EmployeeList @employeesChanged="loadEmployeeNames" />
     </el-dialog>
 
     <!-- 设置对话框 -->
@@ -188,31 +216,47 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ImageUpload from './components/ImageUpload.vue'
 import DataTable from './components/DataTable.vue'
 import SearchPanel from './components/SearchPanel.vue'
 import Statistics from './components/Statistics.vue'
 import BirthdayBlessing from './components/BirthdayBlessing.vue'
+import EmployeeList from './components/EmployeeList.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
-import { Setting } from '@element-plus/icons-vue'
+import LoginDialog from './components/LoginDialog.vue'
+import { saveBase64Image, readImage, getDistinctDepartments } from './utils/api.js'
+import { Setting, CircleCloseFilled, UserFilled } from '@element-plus/icons-vue'
 
 const activeTab = ref('upload')
 const records = ref([])
 const totalRecords = ref(0)
 const dataTableRef = ref(null)
 const birthdayRef = ref(null)
+const employeeListVisible = ref(false)
+const employeeNames = ref([])
 const editDialogVisible = ref(false)
 const editFormRef = ref(null)
 const settingsVisible = ref(false)
+const loginRequired = ref(false)
+const locked = ref(false)
+const lockTimeout = ref(0)
+let idleTimer = null
+let activityEventsBound = false
 const currentEngine = ref('tesseract')
+
+// 编辑对话框图片
+const editFileInput = ref(null)
+const editImagePreview = ref('')
+const editImageFile = ref(null)
 
 const engineLabel = computed(() => {
   switch (currentEngine.value) {
     case 'glm-ocr': return '通道2'
     case 'glm': return '通道1'
-    case 'paddle': return '通道3'
+    case 'qwen-vl-plus': return '通道3'
+    case 'qwen-vl-72b': return '通道4'
     case 'tencent': return '腾讯云OCR'
     default: return 'Tesseract OCR'
   }
@@ -222,7 +266,8 @@ const engineTagType = computed(() => {
   switch (currentEngine.value) {
     case 'glm-ocr': return 'success'
     case 'glm': return ''
-    case 'paddle': return 'primary'
+    case 'qwen-vl-plus': return 'primary'
+    case 'qwen-vl-72b': return 'primary'
     case 'tencent': return ''
     default: return 'info'
   }
@@ -236,6 +281,28 @@ const leaveTypes = [
   '探亲假', '产假', '护理假', '育儿假'
 ]
 
+const BASE_DEPARTMENTS = [
+  '党委班子成员', '新闻采编中心', '蒙编部', '时政部', '评论部',
+  '编辑出版部', '专副刊部', '新媒体一部', '新媒体二部', '综合广播部',
+  '交通音乐广播部', '生活文艺广播部', '指挥调度部', '电视节目部', '外宣联络部',
+  '技术保障部', '数智化发展部', '播出部', '发射部', '传媒发展部',
+  '运营服务部', '政务专题部', '大型活动部', '影视制作部', '财务审计部',
+  '办公室', '组织人事部', '经营监管部', '机关党委', '质评部',
+  '印务部', '舆情智库部', '离退休工作部', '融媒发展公司', '智媒资管理部'
+]
+
+const departmentOptions = ref([...BASE_DEPARTMENTS])
+
+async function loadDepartmentOptions() {
+  try {
+    const deps = await getDistinctDepartments()
+    if (deps && deps.length > 0) {
+      const merged = new Set([...BASE_DEPARTMENTS, ...deps])
+      departmentOptions.value = [...merged].sort()
+    }
+  } catch { /* keep base list */ }
+}
+
 const editForm = reactive({
   id: null,
   applicant: '',
@@ -247,6 +314,7 @@ const editForm = reactive({
   days: 0,
   apply_date: '',
   cancel_date: '',
+  image_path: '',
   remark: ''
 })
 
@@ -263,6 +331,27 @@ function getAPI() {
   if (window.electronAPI) return window.electronAPI
   isBrowserMode.value = true
   return null
+}
+
+// 加载职工名单（用于申请人下拉，仅显示活跃员工）
+async function loadEmployeeNames() {
+  if (!window.electronAPI) return
+  try {
+    const list = await window.electronAPI.getActiveEmployees()
+    employeeNames.value = [...new Set(list.map(e => e.name).filter(Boolean))]
+  } catch { /* ignore */ }
+}
+
+// 数据管理编辑：选择姓名后自动匹配部门
+async function onEditApplicantChange(name) {
+  if (!name || !window.electronAPI) return
+  try {
+    const list = await window.electronAPI.getActiveEmployees()
+    const match = list.find(e => (e.name || '').trim() === name.trim())
+    if (match && match.department) {
+      editForm.department = match.department
+    }
+  } catch { /* ignore */ }
 }
 
 // 加载所有记录
@@ -287,7 +376,7 @@ function handleRecognized(data) {
 }
 
 // 编辑记录
-function handleEditRecord(record) {
+async function handleEditRecord(record) {
   Object.assign(editForm, {
     id: record.id,
     applicant: record.applicant || '',
@@ -299,9 +388,37 @@ function handleEditRecord(record) {
     days: record.days || 0,
     apply_date: record.apply_date || '',
     cancel_date: record.cancel_date || '',
+    image_path: record.image_path || '',
     remark: record.remark || ''
   })
+  // 加载当前图片预览
+  editImagePreview.value = ''
+  editImageFile.value = null
+  if (record.image_path) {
+    try {
+      const dataUrl = await readImage(record.image_path)
+      if (dataUrl) editImagePreview.value = dataUrl
+    } catch { /* ignore */ }
+  }
   editDialogVisible.value = true
+}
+
+// 编辑对话框图片处理
+function onEditImageChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  editImageFile.value = file
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    editImagePreview.value = ev.target.result
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeEditImage() {
+  editImagePreview.value = ''
+  editImageFile.value = null
+  if (editFileInput.value) editFileInput.value.value = ''
 }
 
 // 保存编辑
@@ -313,7 +430,15 @@ async function saveEdit() {
   if (!api) return
 
   try {
-    await api.updateRecord(editForm.id, { ...editForm })
+    let imagePath = editForm.image_path
+    // 如果有新图片，保存并更新路径
+    if (editImagePreview.value && editImageFile.value) {
+      try {
+        imagePath = await saveBase64Image(editImagePreview.value, editImageFile.value.name || 'image.png')
+        if (!imagePath) console.error('saveBase64Image returned empty path')
+      } catch (e) { console.error('saveBase64Image error:', e) }
+    }
+    await api.updateRecord(editForm.id, { ...editForm, image_path: imagePath })
     ElMessage.success('保存成功')
     editDialogVisible.value = false
     loadRecords()
@@ -383,11 +508,82 @@ function onSettingsSaved(settings) {
   if (birthdayRef.value && settings.privacyMode !== undefined) {
     birthdayRef.value.updatePrivacyMode(settings.privacyMode)
   }
+  // 更新自动锁定设置
+  if (settings.lockTimeout !== undefined) {
+    lockTimeout.value = settings.lockTimeout
+    if (settings.loginEnabled && settings.lockTimeout > 0) {
+      startIdleTimer()
+    } else {
+      stopIdleTimer()
+    }
+  }
+  if (settings.loginEnabled === false) {
+    stopIdleTimer()
+  }
 }
 
-onMounted(() => {
+// 自动锁定
+function onUnlocked() {
+  loginRequired.value = false
+  locked.value = false
+  resetIdleTimer()
+}
+
+function startIdleTimer() {
+  stopIdleTimer()
+  if (!lockTimeout.value || lockTimeout.value <= 0) return
+  bindActivityEvents()
+  resetIdleTimer()
+}
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer)
+  if (!lockTimeout.value || lockTimeout.value <= 0) return
+  idleTimer = setTimeout(() => {
+    locked.value = true
+  }, lockTimeout.value * 60 * 1000)
+}
+
+function stopIdleTimer() {
+  clearTimeout(idleTimer)
+  idleTimer = null
+}
+
+function onUserActivity() {
+  if (!locked.value) resetIdleTimer()
+}
+
+function bindActivityEvents() {
+  if (activityEventsBound) return
+  activityEventsBound = true
+  const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart']
+  events.forEach(e => document.addEventListener(e, onUserActivity, { passive: true }))
+}
+
+onMounted(async () => {
   loadTheme()
   loadRecords()
+  loadEmployeeNames()
+  loadDepartmentOptions()
+  // 检查是否需要登录
+  if (window.electronAPI) {
+    try {
+      const settings = await window.electronAPI.getSettings()
+      if (settings?.loginEnabled && settings?.loginPassword) {
+        loginRequired.value = true
+      }
+      if (settings?.lockTimeout) {
+        lockTimeout.value = settings.lockTimeout
+      }
+      if (settings?.loginEnabled && settings?.lockTimeout > 0) {
+        // 初始登录成功后由 onUnlocked 启动计时器
+      }
+    } catch { /* ignore */ }
+  }
+})
+
+onUnmounted(() => {
+  stopIdleTimer()
 })
 </script>
 
@@ -604,5 +800,50 @@ html.dark .preview-content .preview-image {
 
 html.dark .preview-actions {
   border-top-color: #363637;
+}
+
+/* 编辑图片 */
+.edit-image-area {
+  width: 100%;
+  min-height: 100px;
+  border: 2px dashed #dcdfe6;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.edit-image-area:hover {
+  border-color: #409eff;
+}
+.edit-image-preview {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+.edit-image-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 20px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.9);
+  border-radius: 50%;
+}
+.edit-image-hint {
+  color: #c0c4cc;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+html.dark .edit-image-area {
+  border-color: #363637;
+}
+html.dark .edit-image-area:hover {
+  border-color: #409eff;
 }
 </style>

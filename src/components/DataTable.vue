@@ -4,6 +4,10 @@
     <el-card class="section-card">
       <div class="toolbar">
         <div class="toolbar-left">
+          <el-button @click="emit('refresh')">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
           <el-button
             type="danger"
             :disabled="selectedRows.length === 0"

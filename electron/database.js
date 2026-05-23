@@ -127,7 +127,7 @@ class LeaveDatabase {
       UPDATE leave_records SET
         applicant = ?, department = ?, agent = ?, leave_type = ?,
         start_date = ?, end_date = ?, days = ?,
-        apply_date = ?, cancel_date = ?, remark = ?
+        apply_date = ?, cancel_date = ?, image_path = ?, remark = ?
       WHERE id = ?
     `, [
       record.applicant || '',
@@ -139,6 +139,7 @@ class LeaveDatabase {
       record.days || 0,
       record.apply_date || '',
       record.cancel_date || '',
+      record.image_path || '',
       record.remark || '',
       id
     ])
@@ -315,7 +316,7 @@ class LeaveDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         phone TEXT,
-        id_number TEXT NOT NULL UNIQUE,
+        id_number TEXT DEFAULT '',
         department TEXT,
         position TEXT,
         employment_type TEXT,
@@ -325,10 +326,12 @@ class LeaveDatabase {
         created_at DATETIME DEFAULT (datetime('now', 'localtime'))
       )
     `)
+    // 为 id_number 非空值创建唯一索引（允许多个空值）
+    this.db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_id_number ON employees(id_number) WHERE id_number IS NOT NULL AND id_number != ''`)
     this.migrateEmployeeTable()
   }
 
-  // 自动迁移旧表结构（补齐缺失列）
+  // 自动迁移旧表结构（补齐缺失列、修复约束）
   migrateEmployeeTable() {
     const tableInfo = this._queryAll("PRAGMA table_info(employees)")
     const columnNames = tableInfo.map(c => c.name)
@@ -338,7 +341,8 @@ class LeaveDatabase {
       { name: 'employment_type', sql: 'ALTER TABLE employees ADD COLUMN employment_type TEXT' },
       { name: 'remark', sql: 'ALTER TABLE employees ADD COLUMN remark TEXT' },
       { name: 'seq_number', sql: 'ALTER TABLE employees ADD COLUMN seq_number INTEGER DEFAULT 0' },
-      { name: 'category_seq', sql: 'ALTER TABLE employees ADD COLUMN category_seq INTEGER DEFAULT 0' }
+      { name: 'category_seq', sql: 'ALTER TABLE employees ADD COLUMN category_seq INTEGER DEFAULT 0' },
+      { name: 'active', sql: 'ALTER TABLE employees ADD COLUMN active INTEGER DEFAULT 1' }
     ]
 
     for (const m of migrations) {
@@ -347,23 +351,62 @@ class LeaveDatabase {
         this.save()
       }
     }
+
+    // 迁移 id_number 列：去除 NOT NULL UNIQUE 约束，改为部分唯一索引
+    this._migrateIdNumberConstraint()
+  }
+
+  // 修复 id_number 约束：旧表有 NOT NULL UNIQUE，新结构允许空值
+  _migrateIdNumberConstraint() {
+    try {
+      // 先检查表结构中是否仍有 UNIQUE 约束（这是根因）
+      const tableSQL = this._queryOne("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'employees'")
+      const hasUnique = tableSQL && tableSQL.sql && tableSQL.sql.includes('UNIQUE')
+
+      if (!hasUnique) {
+        // 表已无 UNIQUE，确保部分唯一索引存在
+        const indexExists = this._queryOne("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_employees_id_number'")
+        if (!indexExists) {
+          this.db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_id_number ON employees(id_number) WHERE id_number IS NOT NULL AND id_number != ''`)
+          this.save()
+        }
+        return
+      }
+
+      // 重建表：读出所有数据 → 创建新表 → 插入 → 删旧表
+      const rows = this._queryAll('SELECT * FROM employees')
+      this.db.run('DROP TABLE employees')
+      this.createEmployeeTable()
+      // 重新插入所有行
+      for (const row of rows) {
+        this.db.run(`
+          INSERT INTO employees (id, name, phone, id_number, department, position, employment_type, seq_number, category_seq, remark, active, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [row.id, row.name, row.phone || '', row.id_number || '', row.department || '', row.position || '', row.employment_type || '', row.seq_number || 0, row.category_seq || 0, row.remark || '', row.active !== undefined ? row.active : 1, row.created_at])
+      }
+      this.save()
+    } catch (err) {
+      console.error('id_number migration error:', err)
+    }
   }
 
   // 插入单个员工
   insertEmployee(record) {
+    const idNumber = (record.id_number || '').trim()
     this._run(`
-      INSERT INTO employees (name, phone, id_number, department, position, employment_type, seq_number, category_seq, remark)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO employees (name, phone, id_number, department, position, employment_type, seq_number, category_seq, remark, active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       record.name || '',
       record.phone || '',
-      record.id_number || '',
+      idNumber,
       record.department || '',
       record.position || '',
       record.employment_type || '',
       record.seq_number || 0,
       record.category_seq || 0,
-      record.remark || ''
+      record.remark || '',
+      record.active !== undefined ? record.active : 1
     ])
     const result = this._queryOne('SELECT last_insert_rowid() as id')
     return result ? result.id : null
@@ -374,13 +417,17 @@ class LeaveDatabase {
     let inserted = 0
     let skipped = 0
     for (const record of records) {
-      if (!record.id_number) { skipped++; continue }
-      const exists = this._queryOne('SELECT id FROM employees WHERE id_number = ?', [record.id_number])
-      if (exists) { skipped++; continue }
+      if (record.id_number) {
+        const exists = this._queryOne('SELECT id FROM employees WHERE id_number = ?', [record.id_number])
+        if (exists) { skipped++; continue }
+      }
       try {
         this.insertEmployee(record)
         inserted++
-      } catch { skipped++ }
+      } catch (e) {
+        console.error('insertEmployee error:', e)
+        skipped++
+      }
     }
     return { inserted, skipped }
   }
@@ -388,6 +435,17 @@ class LeaveDatabase {
   // 获取所有员工
   getAllEmployees() {
     return this._queryAll('SELECT * FROM employees ORDER BY created_at DESC')
+  }
+
+  // 获取活跃员工（active=1 或 active IS NULL）
+  getActiveEmployees() {
+    return this._queryAll("SELECT * FROM employees WHERE active IS NULL OR active = 1 ORDER BY created_at DESC")
+  }
+
+  // 获取所有不重复的部门列表
+  getDistinctDepartments() {
+    const rows = this._queryAll("SELECT DISTINCT department FROM employees WHERE department IS NOT NULL AND department != '' ORDER BY department")
+    return rows.map(r => r.department)
   }
 
   // 删除员工
@@ -404,25 +462,25 @@ class LeaveDatabase {
     return true
   }
 
-  // 更新员工
+  // 更新员工（仅更新传入的字段）
   updateEmployee(id, record) {
-    this._run(`
-      UPDATE employees SET
-        name = ?, phone = ?, id_number = ?, department = ?,
-        position = ?, employment_type = ?, seq_number = ?, category_seq = ?, remark = ?
-      WHERE id = ?
-    `, [
-      record.name || '',
-      record.phone || '',
-      record.id_number || '',
-      record.department || '',
-      record.position || '',
-      record.employment_type || '',
-      record.seq_number || 0,
-      record.category_seq || 0,
-      record.remark || '',
-      id
-    ])
+    const setClauses = []
+    const values = []
+    for (const [key, value] of Object.entries(record)) {
+      if (key === 'id_number') {
+        setClauses.push('id_number = ?')
+        values.push((value || '').trim())
+      } else if (key === 'id') {
+        continue
+      } else {
+        setClauses.push(`${key} = ?`)
+        values.push(value)
+      }
+    }
+    if (setClauses.length === 0) return false
+    values.push(id)
+    this._run(`UPDATE employees SET ${setClauses.join(', ')} WHERE id = ?`, values)
+    this.save()
     return true
   }
 

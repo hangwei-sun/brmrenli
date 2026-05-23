@@ -144,12 +144,16 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="申请人" prop="applicant">
-              <el-input v-model="manualForm.applicant" placeholder="姓名" />
+              <el-select v-model="manualForm.applicant" placeholder="请选择或输入申请人" clearable filterable allow-create style="width:100%" @change="onManualApplicantChange">
+                <el-option v-for="n in employeeNames" :key="n" :label="n" :value="n" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="部门">
-              <el-input v-model="manualForm.department" placeholder="所在部门" />
+              <el-select v-model="manualForm.department" placeholder="所在部门" clearable filterable style="width:100%">
+                <el-option v-for="d in departmentOptions" :key="d" :label="d" :value="d" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -204,10 +208,10 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import OcrPreview from './OcrPreview.vue'
-import { openImages, readImage, copyImage, recognizeOcr, insertRecord, saveBase64Image, getAllEmployees } from '../utils/api.js'
+import { openImages, readImage, copyImage, recognizeOcr, insertRecord, saveBase64Image, getActiveEmployees, getDistinctDepartments } from '../utils/api.js'
 
 const emit = defineEmits(['recognized'])
 
@@ -217,7 +221,7 @@ let employeeCache = null
 async function loadEmployeeCache() {
   if (!employeeCache) {
     try {
-      employeeCache = await getAllEmployees()
+      employeeCache = await getActiveEmployees()
     } catch {
       employeeCache = []
     }
@@ -240,7 +244,7 @@ async function matchOcrResultToRoster(ocrItem) {
 
     if (exactMatches.length === 1) {
       const emp = exactMatches[0]
-      if (!ocrItem.department && emp.department) {
+      if (emp.department) {
         ocrItem.department = emp.department
       }
       ocrItem._rosterMatch = 'exact'
@@ -272,6 +276,50 @@ const leaveTypes = [
   '年休假', '病假', '事假', '婚假', '丧假',
   '探亲假', '产假', '护理假', '育儿假'
 ]
+
+const employeeNames = ref([])
+
+async function loadEmployeeNames() {
+  if (!window.electronAPI) return
+  try {
+    const list = await window.electronAPI.getActiveEmployees()
+    employeeNames.value = [...new Set(list.map(e => e.name).filter(Boolean))]
+  } catch { /* ignore */ }
+}
+
+// 手动录入：选择姓名后自动匹配部门
+async function onManualApplicantChange(name) {
+  if (!name) return
+  try {
+    const employees = await loadEmployeeCache()
+    const match = employees.find(e => (e.name || '').trim() === name.trim())
+    if (match && match.department) {
+      manualForm.department = match.department
+    }
+  } catch { /* ignore */ }
+}
+
+const BASE_DEPARTMENTS = [
+  '党委班子成员', '新闻采编中心', '蒙编部', '时政部', '评论部',
+  '编辑出版部', '专副刊部', '新媒体一部', '新媒体二部', '综合广播部',
+  '交通音乐广播部', '生活文艺广播部', '指挥调度部', '电视节目部', '外宣联络部',
+  '技术保障部', '数智化发展部', '播出部', '发射部', '传媒发展部',
+  '运营服务部', '政务专题部', '大型活动部', '影视制作部', '财务审计部',
+  '办公室', '组织人事部', '经营监管部', '机关党委', '质评部',
+  '印务部', '舆情智库部', '离退休工作部', '融媒发展公司', '智媒资管理部'
+]
+
+const departmentOptions = ref([...BASE_DEPARTMENTS])
+
+async function loadDepartmentOptions() {
+  try {
+    const deps = await getDistinctDepartments()
+    if (deps && deps.length > 0) {
+      const merged = new Set([...BASE_DEPARTMENTS, ...deps])
+      departmentOptions.value = [...merged].sort()
+    }
+  } catch { /* keep base list */ }
+}
 
 // 手动录入
 const showManualDialog = ref(false)
@@ -574,6 +622,11 @@ async function handleSaveAll() {
   ElMessage.success('成功保存 ' + savedCount + ' 条记录')
   emit('recognized', null)
 }
+
+onMounted(() => {
+  loadEmployeeNames()
+  loadDepartmentOptions()
+})
 </script>
 
 <style scoped>

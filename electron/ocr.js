@@ -151,8 +151,8 @@ class OcrEngine {
     if (engine === 'glm-ocr' && this.settings?.glmApiKey) {
       return this.recognizeWithGlmOcr(imagePath)
     }
-    if (engine === 'paddle' && this.settings?.paddleOcrApiKey) {
-      return this.recognizeWithPaddleOcr(imagePath)
+    if ((engine === 'qwen-vl-plus' || engine === 'qwen-vl-72b') && this.settings?.dashscopeApiKey) {
+      return this.recognizeWithQwenVL(imagePath)
     }
     return this.recognizeWithTesseract(imagePath)
   }
@@ -511,31 +511,65 @@ class OcrEngine {
     }
   }
 
-  // ============ 百度千帆 PaddleOCR-VL ============
-  async recognizeWithPaddleOcr(imagePath) {
-    if (!this.settings?.paddleOcrApiKey) {
-      throw new Error('请先在设置中配置百度千帆API Key')
+  // ============ 阿里云百炼 Qwen-VL ============
+  async recognizeWithQwenVL(imagePath) {
+    if (!this.settings?.dashscopeApiKey) {
+      throw new Error('请先在设置中配置阿里云百炼API Key')
     }
 
     const imageBuffer = fs.readFileSync(imagePath)
+    const ext = path.extname(imagePath).toLowerCase().replace('.', '')
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'bmp' ? 'image/bmp' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
     const base64 = imageBuffer.toString('base64')
+    const dataUrl = `data:${mimeType};base64,${base64}`
 
-    const response = await fetch('https://qianfan.baidubce.com/v2/ocr/paddleocr', {
+    const model = this.settings?.ocrEngine === 'qwen-vl-72b' ? 'qwen2.5-vl-72b-instruct' : 'qwen-vl-plus-2025-05-07'
+
+    const prompt = `你是一个专业的手写体OCR识别助手。请仔细查看这张请假条图片，**只识别手写体内容**，忽略所有印刷体的表格文字、标签、注释。
+
+请提取以下字段（只返回手写的内容，如果某个字段没有手写内容则留空）：
+- 申请人（姓名）
+- 所属部门
+- 代办人
+- 请假类型（年休假/病假/事假/婚假/丧假/探亲假/产假/护理假/育儿假）
+- 开始日期（格式：YYYY-MM-DD）
+- 结束日期（格式：YYYY-MM-DD）
+- 请假天数
+- 申请日期（格式：YYYY-MM-DD）
+- 销假日期（格式：YYYY-MM-DD）
+
+请严格按照以下JSON格式返回，不要返回其他内容：
+{
+  "applicant": "",
+  "department": "",
+  "agent": "",
+  "leave_type": "",
+  "start_date": "",
+  "end_date": "",
+  "days": 0,
+  "apply_date": "",
+  "cancel_date": ""
+}`
+
+    const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.settings.paddleOcrApiKey}`
+        'Authorization': `Bearer ${this.settings.dashscopeApiKey}`
       },
       body: JSON.stringify({
-        model: 'paddleocr-vl-0.9b',
-        file: base64,
-        fileType: 1,
-        useChartRecognition: true,
-        useDocUnwarping: true,
-        useLayoutDetection: true,
-        layoutNms: true,
-        temperature: 0,
-        topP: 1.0
+        model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: dataUrl } },
+              { type: 'text', text: prompt }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 1024
       })
     })
 
@@ -543,73 +577,52 @@ class OcrEngine {
       const errText = await response.text().catch(() => '')
       let errMsg
       try {
-        errMsg = JSON.parse(errText).error?.message || errText
+        const errJson = JSON.parse(errText)
+        errMsg = errJson.error?.message || errJson.message || errText
       } catch {
         errMsg = errText || `HTTP ${response.status}`
       }
-      throw new Error(`PaddleOCR-VL调用失败: ${errMsg}`)
+      throw new Error(`Qwen-VL调用失败: ${errMsg}`)
     }
 
     const result = await response.json()
+    const content = result.choices?.[0]?.message?.content || ''
 
-    // 解析版面结果
-    const layoutResults = result.result?.layoutParsingResults
-    let allElements = []
-
-    if (layoutResults && layoutResults.length > 0) {
-      const lr = layoutResults[0]
-      // 从 parsing_res_list 提取文本块
-      if (lr.parsing_res_list && Array.isArray(lr.parsing_res_list)) {
-        for (const block of lr.parsing_res_list) {
-          const text = block.block_content || ''
-          if (text.trim()) {
-            allElements.push({
-              text: text.trim(),
-              confidence: 90,
-              bbox: Array.isArray(block.block_bbox) && block.block_bbox.length === 4
-                ? { x0: block.block_bbox[0], y0: block.block_bbox[1], x1: block.block_bbox[2], y1: block.block_bbox[3] }
-                : { x0: 0, y0: allElements.length * 30, x1: 100, y1: allElements.length * 30 + 30 }
-            })
-          }
-        }
+    // 解析JSON响应
+    let parsed = null
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0])
       }
-      // 回退: 从 markdown 文本提取
-      if (allElements.length === 0 && lr.markdown?.text) {
-        lr.markdown.text.split('\n').filter(l => l.trim())
-          .forEach((line, i) => {
-            allElements.push({ text: line.trim(), confidence: 80, bbox: { x0: 0, y0: i * 30, x1: 100, y1: i * 30 + 30 } })
-          })
-      }
+    } catch {
+      // JSON解析失败，尝试逐字段正则提取
     }
 
-    if (allElements.length === 0) {
-      throw new Error('PaddleOCR-VL未检测到文字，请确认图片清晰度')
+    if (!parsed) {
+      parsed = this.parseFieldsFromText(content)
     }
 
-    const words = allElements.map((el, idx) => ({
-      text: el.text,
-      confidence: el.confidence,
-      bbox: el.bbox
-    }))
-
-    const fullText = words.map(w => w.text).join('\n')
-    const avgConfidence = Math.round(words.reduce((s, w) => s + w.confidence, 0) / words.length)
-
-    const filteredWords = words.filter(w => !this.isPrintedText(w.text))
-    const lines = this.groupWordsByLines(filteredWords.length > 0 ? filteredWords : words)
-    const extracted = this.extractFieldsWithSpatialAnalysis({
-      text: fullText,
-      confidence: avgConfidence,
-      words: filteredWords.length > 0 ? filteredWords : words,
-      lines,
-      blocks: []
-    })
+    const fullText = Object.entries(parsed)
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('\n')
 
     return {
-      fullText: this.filterFullText(fullText),
-      confidence: avgConfidence,
-      engine: 'paddle',
-      ...extracted
+      fullText,
+      confidence: 90,
+      engine: this.settings?.ocrEngine || 'qwen-vl-plus',
+      applicant: parsed.applicant || '',
+      department: parsed.department || '',
+      agent: parsed.agent || '',
+      leave_type: parsed.leave_type || '',
+      start_date: parsed.start_date || '',
+      end_date: parsed.end_date || '',
+      days: parseInt(parsed.days) || this.calcDays(parsed.start_date, parsed.end_date),
+      apply_date: parsed.apply_date || '',
+      cancel_date: parsed.cancel_date || '',
+      fieldConfidence: {},
+      extractedWords: {}
     }
   }
 

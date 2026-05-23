@@ -13,8 +13,8 @@ const DEFAULT_SETTINGS = {
   // 智谱AI GLM-4.6V-Flash配置
   glmApiKey: '',
 
-  // 百度千帆 PaddleOCR-VL配置
-  paddleOcrApiKey: '',
+  // 阿里云百炼 DashScope配置（Qwen-VL通道3/4）
+  dashscopeApiKey: '',
 
   // 主题: 'light' | 'dark' | 'system'
   theme: 'light',
@@ -27,6 +27,13 @@ const DEFAULT_SETTINGS = {
 
   // 隐私模式：开启后电话和身份证号部分隐藏
   privacyMode: false,
+
+  // 登录密码
+  loginEnabled: false,
+  loginPassword: '',
+
+  // 管理员密码（用于删除职工等敏感操作，初始默认 654321）
+  adminPassword: '481f6cc0511143ccdd7e2d1b1b94faf0a700a8b49cd13922a70b5ae28acaa8c5',
 
   // 首次使用引导
   onboarded: false

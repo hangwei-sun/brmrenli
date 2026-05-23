@@ -11,7 +11,8 @@
 ### 1. 多引擎OCR识别
 - **通道1 — GLM-4.6V**（智谱AI视觉大模型）— 手写体识别率约90-98%，自动忽略印刷体，需联网
 - **通道2 — GLM-OCR**（智谱AI专用OCR模型）— layout_parsing API，高精度文字检测与识别
-- **通道3 — PaddleOCR-VL**（百度千帆）— 文档版面解析，支持图表识别，需配置API Key
+- **通道3 — qwen-vl-plus**（阿里云百炼）— 视觉理解模型，平衡速度与精度
+- **通道4 — qwen2.5-vl-72b**（阿里云百炼）— 72B参数超大视觉模型，最高精度
 - **Tesseract**（本地）— 离线可用，免费无限制
 - 智能提取：申请人、部门、代办人、请假类型、日期、天数等字段
 - 空间位置分析 + 大模型语义理解，精准分离印刷体与手写内容
@@ -24,7 +25,7 @@
 - 手动录入数据同样纳入数据库统一管理
 
 ### 3. 数据管理
-- 请假记录增删改查
+- 请假记录增删改查（编辑时可更换请假条原图）
 - 支持单条/批量删除
 - 点击查看原始请假条图片（含手动录入上传的图片）
 - 导出全部数据到Excel
@@ -57,9 +58,10 @@
 - 隐私模式：开启后电话和身份证号部分脱敏显示（138****1234 / 1101**********1234）
 
 ### 7. 系统设置
-- OCR引擎切换（通道1 GLM-4.6V / 通道2 GLM-OCR / 通道3 PaddleOCR-VL / Tesseract）
+- OCR引擎切换（通道1 GLM-4.6V / 通道2 GLM-OCR / 通道3 qwen-vl-plus / 通道4 qwen2.5-vl-72b / Tesseract）
 - GLM API密钥配置与连接测试
-- 百度千帆 API密钥配置与连接测试
+- 阿里云百炼 API密钥配置与连接测试
+- 软件登录密码保护（可在设置中开启）
 - 浅色/暗色/跟随系统主题切换
 - 识别自动保存开关
 - 隐私模式开关
@@ -80,7 +82,7 @@
 | sql.js | SQLite数据库（WebAssembly，无需编译） |
 | Tesseract.js 5 | 本地OCR引擎 |
 | GLM-OCR / GLM-4.6V-Flash | 智谱AI识别引擎 |
-| PaddleOCR-VL | 百度千帆识别引擎 |
+| Qwen-VL (qwen-vl-plus / qwen2.5-vl-72b) | 阿里云百炼识别引擎 |
 | tencentcloud-sdk-nodejs-ocr | 腾讯云OCR引擎 |
 | sharp | 图像预处理 |
 | xlsx | Excel导入导出 |
@@ -168,7 +170,9 @@ leave-management/
 │   │   ├── DataTable.vue        # 数据表格与批量操作
 │   │   ├── SearchPanel.vue      # 组合条件查询筛选
 │   │   ├── Statistics.vue       # 统计图表（年度筛选、TOP10）
-│   │   ├── BirthdayBlessing.vue # 生日祝福（员工管理、隐私脱敏、Excel导入导出）
+│   │   ├── BirthdayBlessing.vue # 生日祝福（员工管理、隐私脱敏、Excel导出）
+│   │   ├── EmployeeList.vue      # 职工名单管理（CRUD、批量导入、状态管理）
+│   │   ├── LoginDialog.vue       # 登录密码验证对话框
 │   │   └── SettingsDialog.vue   # 系统设置对话框
 │   └── utils/
 │       └── api.js               # Electron API安全封装层
@@ -203,11 +207,14 @@ CREATE TABLE employees (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL,     -- 姓名
     phone           TEXT,              -- 电话
-    id_number       TEXT NOT NULL UNIQUE, -- 身份证号（唯一）
+    id_number       TEXT DEFAULT '',   -- 身份证号（非空值唯一）
     department      TEXT,              -- 所在部门
     position        TEXT,              -- 职务
     employment_type TEXT,              -- 在编/聘用
+    seq_number      INTEGER DEFAULT 0,-- 总序号
+    category_seq    INTEGER DEFAULT 0,-- 分类序号
     remark          TEXT,              -- 备注
+    active          INTEGER DEFAULT 1,-- 活跃状态（1=活跃, 0=停用）
     created_at      DATETIME DEFAULT (datetime('now','localtime'))
 );
 ```
@@ -240,6 +247,11 @@ node -e "const {rcedit}=require('rcedit');rcedit('release/win-unpacked/包融媒
 
 ## 版本历史
 
+- **v2.3.5** — 数据库id_number约束修复（允许多空值/部分唯一索引）、部门下拉统一从职工表读取、生日祝福模块重构（编辑替代删除/仅显示活跃职工）、系统空闲自动锁定
+- **v2.3.0** — 申请人/部门改为下拉选择+选人自动匹配部门、OCR预览申请人智能下拉、数据管理增加刷新按钮
+- **v2.2.0** — 职工名单独立管理模块（EmployeeList.vue，含批量导入/手工录入/删除需管理员验证）、职工活跃/停用状态切换、管理员密码
+- **v2.1.0** — 软件登录密码保护（LoginDialog.vue）、职工表新增active字段、花名册行内编辑、部门列表统一管理
+- **v2.0.0** — 阿里云百炼Qwen-VL接入（通道3/4）、编辑可更换请假条原图、基础登录密码框架
 - **v1.9.0** — 数据备份与同步（导出/导入zip）、OCR引擎通道重构（通道1/2/3）、PaddleOCR-VL接入、花名册总序号/分类序号可编辑、UI优化
 - **v1.8.0** — 修复EXE图标（afterPack钩子+本地rcedit）、隐私模式实时生效、花名册新增职务/在编聘用/备注
 - **v1.7.0** — 花名册与OCR申请人匹配（自动补全部门）、匹配状态展示

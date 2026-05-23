@@ -53,7 +53,9 @@
               <el-row :gutter="12">
                 <el-col :span="12">
                   <el-form-item label="申请人">
-                    <el-input v-model="item.applicant" @change="emitUpdate(index, 'applicant', $event)" />
+                    <el-select v-model="item.applicant" clearable filterable allow-create @change="emitUpdate(index, 'applicant', $event)" style="width:100%">
+                      <el-option v-for="n in employeeNames" :key="n" :label="n" :value="n" />
+                    </el-select>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
@@ -178,7 +180,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 
 defineProps({
   results: { type: Array, default: () => [] }
@@ -187,6 +189,16 @@ defineProps({
 const emit = defineEmits(['update', 'save', 'saveAll'])
 
 const activeNames = ref([0])
+
+const employeeNames = ref([])
+
+async function loadEmployeeNames() {
+  if (!window.electronAPI) return
+  try {
+    const list = await window.electronAPI.getActiveEmployees()
+    employeeNames.value = [...new Set(list.map(e => e.name).filter(Boolean))]
+  } catch { /* ignore */ }
+}
 
 const leaveTypes = [
   '年休假', '病假', '事假', '婚假', '丧假',
@@ -212,6 +224,10 @@ function hasSpatialMatch(item) {
 function emitUpdate(index, field, value) {
   emit('update', { index, field, value })
 }
+
+onMounted(() => {
+  loadEmployeeNames()
+})
 </script>
 
 <style scoped>

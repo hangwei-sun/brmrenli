@@ -1,6 +1,6 @@
 {
   "name": "leave-management",
-  "version": "1.9.0",
+  "version": "2.3.5",
   "description": "包融媒人力智慧管理系统 - 包头市融媒体中心",
   "main": "electron/main.js",
   "scripts": {
@@ -25,7 +25,8 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,

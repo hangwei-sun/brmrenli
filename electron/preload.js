@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 员工管理
   getAllEmployees: () => ipcRenderer.invoke('db:getAllEmployees'),
+  getActiveEmployees: () => ipcRenderer.invoke('db:getActiveEmployees'),
+  getDistinctDepartments: () => ipcRenderer.invoke('db:getDistinctDepartments'),
   insertEmployee: (record) => ipcRenderer.invoke('db:insertEmployee', record),
   insertEmployeesBatch: (records) => ipcRenderer.invoke('db:insertEmployeesBatch', records),
   updateEmployee: (id, record) => ipcRenderer.invoke('db:updateEmployee', id, record),
@@ -52,7 +54,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateAllSettings: (newSettings) => ipcRenderer.invoke('settings:updateAll', newSettings),
   testTencentApi: (config) => ipcRenderer.invoke('settings:testTencent', config),
   testGlmApi: (config) => ipcRenderer.invoke('settings:testGlm', config),
-  testPaddleOcrApi: (config) => ipcRenderer.invoke('settings:testPaddleOcr', config),
+  testDashScopeApi: (config) => ipcRenderer.invoke('settings:testDashScope', config),
+
+  // 登录密码
+  setPassword: (password) => ipcRenderer.invoke('password:set', password),
+  verifyPassword: (password) => ipcRenderer.invoke('password:verify', password),
+  isPasswordSet: () => ipcRenderer.invoke('password:isSet'),
+  setAdminPassword: (password) => ipcRenderer.invoke('password:setAdmin', password),
+  verifyAdminPassword: (password) => ipcRenderer.invoke('password:verifyAdmin', password),
 
   // 备份与同步
   exportBackup: () => ipcRenderer.invoke('backup:export'),

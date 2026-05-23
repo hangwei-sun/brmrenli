@@ -2,21 +2,9 @@
   <div class="birthday-module">
     <!-- 操作工具栏 -->
     <div class="bless-toolbar">
-      <el-button type="primary" @click="uploadDialogVisible = true">
-        <el-icon><Upload /></el-icon>
-        批量导入Excel
-      </el-button>
       <el-button @click="loadEmployees">
         <el-icon><Refresh /></el-icon>
         刷新
-      </el-button>
-      <el-button type="success" plain @click="openManualDialog">
-        <el-icon><Plus /></el-icon>
-        手动录入
-      </el-button>
-      <el-button type="danger" plain @click="batchDelete" :disabled="selectedRows.length === 0">
-        <el-icon><Delete /></el-icon>
-        批量删除 ({{ selectedRows.length }})
       </el-button>
       <div class="toolbar-right">
         <el-input v-model="searchKeyword" placeholder="搜索姓名/部门" clearable @input="onSearch" style="width:200px" />
@@ -118,11 +106,9 @@
       <el-table
         :data="employees"
         v-loading="loading"
-        @selection-change="onSelectionChange"
         stripe
         max-height="500"
       >
-        <el-table-column type="selection" width="45" />
         <el-table-column prop="seq_number" label="总序号" width="80" align="center" />
         <el-table-column prop="category_seq" label="分类序号" width="80" align="center" />
         <el-table-column prop="name" label="姓名" width="100" />
@@ -153,32 +139,32 @@
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button type="danger" size="small" text @click="deleteSingle(row.id)">删除</el-button>
+            <el-button type="primary" size="small" text @click="openEditDialog(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <!-- 手动录入对话框 -->
-    <el-dialog v-model="manualDialogVisible" title="手动录入员工信息" width="480px" destroy-on-close>
-      <el-form :model="manualForm" label-width="100px">
-        <el-form-item label="姓名" required>
-          <el-input v-model="manualForm.name" placeholder="请输入姓名" />
-        </el-form-item>
-        <el-form-item label="电话">
-          <el-input v-model="manualForm.phone" placeholder="请输入电话" />
-        </el-form-item>
-        <el-form-item label="身份证号" required>
-          <el-input v-model="manualForm.id_number" placeholder="请输入身份证号（唯一）" />
+    <!-- 编辑员工信息对话框 -->
+    <el-dialog v-model="editDialogVisible" title="编辑员工信息" width="480px" destroy-on-close>
+      <el-form :model="editForm" label-width="100px">
+        <el-form-item label="姓名">
+          <el-input v-model="editForm.name" disabled />
         </el-form-item>
         <el-form-item label="部门">
-          <el-input v-model="manualForm.department" placeholder="请输入所在部门" />
+          <el-input v-model="editForm.department" disabled />
+        </el-form-item>
+        <el-form-item label="电话">
+          <el-input v-model="editForm.phone" placeholder="请输入电话" />
+        </el-form-item>
+        <el-form-item label="身份证号">
+          <el-input v-model="editForm.id_number" placeholder="选填，不可重复" />
         </el-form-item>
         <el-form-item label="职务">
-          <el-input v-model="manualForm.position" placeholder="请输入职务" />
+          <el-input v-model="editForm.position" placeholder="请输入职务" />
         </el-form-item>
         <el-form-item label="在编/聘用">
-          <el-select v-model="manualForm.employment_type" placeholder="请选择" style="width:100%" clearable>
+          <el-select v-model="editForm.employment_type" placeholder="请选择" style="width:100%" clearable>
             <el-option label="在编" value="在编" />
             <el-option label="聘用" value="聘用" />
           </el-select>
@@ -186,98 +172,41 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="总序号">
-              <el-input-number v-model="manualForm.seq_number" :min="0" :max="9999" style="width:100%" />
+              <el-input-number v-model="editForm.seq_number" :min="0" :max="9999" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="分类序号">
-              <el-input-number v-model="manualForm.category_seq" :min="0" :max="9999" style="width:100%" />
+              <el-input-number v-model="editForm.category_seq" :min="0" :max="9999" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-form-item label="备注">
-          <el-input v-model="manualForm.remark" type="textarea" :rows="2" placeholder="可选备注" />
+          <el-input v-model="editForm.remark" type="textarea" :rows="2" placeholder="可选备注" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="manualDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveManual" :loading="manualSaving">保存</el-button>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveEdit" :loading="editSaving">保存</el-button>
       </template>
     </el-dialog>
 
-    <!-- 批量上传对话框 -->
-    <el-dialog v-model="uploadDialogVisible" title="批量导入员工信息" width="550px" destroy-on-close>
-      <div class="upload-section">
-        <div class="upload-area" @click="handleFileClick">
-          <input ref="fileInput" type="file" accept=".xlsx,.xls" @change="handleFileChange" style="display:none" />
-          <el-icon :size="48" color="#409EFF"><UploadFilled /></el-icon>
-          <p>点击选择 Excel 文件</p>
-          <p class="upload-hint">Excel第一行应为表头：姓名、电话、身份证号、部门</p>
-          <p class="upload-hint">身份证号为必填项，重复的将自动跳过</p>
-        </div>
-        <div v-if="uploadFile" class="file-info">
-          <el-tag>{{ uploadFile.name }}</el-tag>
-          <el-button type="primary" @click="doImport" :loading="importing" style="margin-left:12px">
-            开始导入
-          </el-button>
-        </div>
-        <div v-if="importResult" class="import-result">
-          <el-alert
-            :title="`导入完成：成功 ${importResult.inserted} 条，跳过 ${importResult.skipped} 条（重复或无效）`"
-            :type="importResult.inserted > 0 ? 'success' : 'warning'"
-            :closable="false"
-            show-icon
-          />
-        </div>
-        <!-- 下载模板 -->
-        <div class="template-download">
-          <el-button text type="primary" @click="downloadTemplate">
-            <el-icon><Download /></el-icon>
-            下载Excel模板
-          </el-button>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="uploadDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
 import {
-  getAllEmployees, insertEmployee, insertEmployeesBatch, deleteEmployee, deleteEmployeesBatch,
-  searchEmployees, getEmployeeCount, getBirthdayByMonth, getBirthdayByRange,
+  getActiveEmployees, updateEmployee,
+  searchEmployees, getBirthdayByMonth, getBirthdayByRange,
   getBirthdayCountByMonth, getSettings
 } from '../utils/api.js'
 
 const loading = ref(false)
 const employees = ref([])
-const selectedRows = ref([])
 const searchKeyword = ref('')
-const uploadDialogVisible = ref(false)
-const uploadFile = ref(null)
-const importing = ref(false)
-const importResult = ref(null)
-const fileInput = ref(null)
-
-// 手动录入
-const manualDialogVisible = ref(false)
-const manualSaving = ref(false)
-const manualForm = reactive({
-  name: '',
-  phone: '',
-  id_number: '',
-  department: '',
-  position: '',
-  employment_type: '',
-  seq_number: 0,
-  category_seq: 0,
-  remark: ''
-})
 
 // 筛选
 const filterType = ref('month')
@@ -286,6 +215,51 @@ const filterStartMonth = ref(1)
 const filterEndMonth = ref(12)
 const birthdayList = ref([])
 const birthdayCount = ref(0)
+
+// 编辑功能
+const editDialogVisible = ref(false)
+const editSaving = ref(false)
+const editingId = ref(null)
+const editForm = reactive({
+  name: '',
+  department: '',
+  phone: '',
+  id_number: '',
+  position: '',
+  employment_type: '',
+  seq_number: 0,
+  category_seq: 0,
+  remark: ''
+})
+
+function openEditDialog(row) {
+  editingId.value = row.id
+  editForm.name = row.name || ''
+  editForm.department = row.department || ''
+  editForm.phone = row.phone || ''
+  editForm.id_number = row.id_number || ''
+  editForm.position = row.position || ''
+  editForm.employment_type = row.employment_type || ''
+  editForm.seq_number = row.seq_number || 0
+  editForm.category_seq = row.category_seq || 0
+  editForm.remark = row.remark || ''
+  editDialogVisible.value = true
+}
+
+async function saveEdit() {
+  editSaving.value = true
+  try {
+    await updateEmployee(editingId.value, { ...editForm })
+    ElMessage.success('员工信息已更新')
+    editDialogVisible.value = false
+    loadEmployees()
+    loadBirthdayData()
+  } catch (err) {
+    ElMessage.error('保存失败: ' + err.message)
+  } finally {
+    editSaving.value = false
+  }
+}
 
 // 隐私模式
 const privacyMode = ref(false)
@@ -298,10 +272,6 @@ const birthdayLabel = computed(() => {
   }
   return `${filterStartMonth.value}月-${filterEndMonth.value}月 生日员工`
 })
-
-function onSelectionChange(rows) {
-  selectedRows.value = rows
-}
 
 // 加载隐私设置
 async function loadPrivacySetting() {
@@ -346,7 +316,7 @@ function formatBirthday(idNumber) {
 async function loadEmployees() {
   loading.value = true
   try {
-    employees.value = await getAllEmployees()
+    employees.value = await getActiveEmployees()
   } catch (err) {
     ElMessage.error('加载员工数据失败: ' + err.message)
   } finally {
@@ -386,134 +356,6 @@ function onSearch() {
   searchEmployees({ name: searchKeyword.value }).then(r => {
     if (Array.isArray(r)) employees.value = r
   }).catch(() => {})
-}
-
-function handleFileClick() {
-  fileInput.value?.click()
-}
-
-function handleFileChange(e) {
-  const file = e.target.files?.[0]
-  if (file) {
-    uploadFile.value = file
-    importResult.value = null
-  }
-}
-
-async function doImport() {
-  if (!uploadFile.value) return
-  importing.value = true
-  importResult.value = null
-  try {
-    const data = await readExcelFile(uploadFile.value)
-    const records = []
-    data.forEach(row => {
-      const name = row['姓名'] || row['name'] || ''
-      const phone = String(row['电话'] || row['phone'] || row['手机'] || row['手机号'] || '')
-      const idNumber = String(row['身份证号'] || row['id_number'] || row['身份证'] || row['证件号'] || '')
-      const department = row['部门'] || row['department'] || row['所在部门'] || row['所属部门'] || ''
-      const position = row['职务'] || row['position'] || row['职位'] || ''
-      const employmentType = row['在编/聘用'] || row['employment_type'] || row['用工性质'] || ''
-      const seqNumber = parseInt(row['总序号']) || parseInt(row['seq_number']) || 0
-      const categorySeq = parseInt(row['分类序号']) || parseInt(row['category_seq']) || 0
-      const remark = row['备注'] || row['remark'] || row['note'] || ''
-      if (idNumber && name) {
-        records.push({ name, phone, id_number: idNumber.trim(), department, position, employment_type: employmentType.trim(), seq_number: seqNumber, category_seq: categorySeq, remark })
-      }
-    })
-    if (records.length === 0) {
-      ElMessage.warning('未读取到有效数据，请检查Excel格式')
-      return
-    }
-    importResult.value = await insertEmployeesBatch(records)
-    ElMessage.success(`导入完成：成功 ${importResult.value.inserted} 条，跳过 ${importResult.value.skipped} 条`)
-    uploadFile.value = null
-    loadEmployees()
-  } catch (err) {
-    ElMessage.error('导入失败: ' + err.message)
-  } finally {
-    importing.value = false
-  }
-}
-
-function readExcelFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = e => {
-      try {
-        const workbook = XLSX.read(e.target.result, { type: 'binary' })
-        const sheet = workbook.Sheets[workbook.SheetNames[0]]
-        const data = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-        resolve(data)
-      } catch (err) {
-        reject(err)
-      }
-    }
-    reader.onerror = reject
-    reader.readAsBinaryString(file)
-  })
-}
-
-function downloadTemplate() {
-  const header = ['姓名', '电话', '身份证号', '部门', '职务', '在编/聘用', '总序号', '分类序号', '备注']
-  const sample = ['张三', '13800138000', '110101199001011234', '融媒体中心', '主任编辑', '在编', 1, 1, '']
-  const ws = XLSX.utils.aoa_to_sheet([header, sample])
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '员工信息')
-  XLSX.writeFile(wb, '员工信息导入模板.xlsx')
-  ElMessage.success('模板下载成功')
-}
-
-async function deleteSingle(id) {
-  try {
-    await ElMessageBox.confirm('确定删除该员工信息吗？', '确认删除', { type: 'warning' })
-    await deleteEmployee(id)
-    ElMessage.success('删除成功')
-    loadEmployees()
-  } catch { /* cancelled */ }
-}
-
-async function batchDelete() {
-  try {
-    await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 名员工吗？`, '批量删除', { type: 'warning' })
-    const ids = selectedRows.value.map(r => r.id)
-    await deleteEmployeesBatch(ids)
-    ElMessage.success('删除成功')
-    selectedRows.value = []
-    loadEmployees()
-  } catch { /* cancelled */ }
-}
-
-function openManualDialog() {
-  manualForm.name = ''
-  manualForm.phone = ''
-  manualForm.id_number = ''
-  manualForm.department = ''
-  manualForm.position = ''
-  manualForm.employment_type = ''
-  manualForm.seq_number = 0
-  manualForm.category_seq = 0
-  manualForm.remark = ''
-  manualDialogVisible.value = true
-}
-
-async function saveManual() {
-  if (!manualForm.name || !manualForm.id_number) {
-    ElMessage.warning('姓名和身份证号为必填项')
-    return
-  }
-  manualSaving.value = true
-  try {
-    await insertEmployee({ ...manualForm })
-    ElMessage.success('员工信息保存成功')
-    manualDialogVisible.value = false
-    loadEmployees()
-    loadBirthdayData()
-  } catch (err) {
-    ElMessage.error('保存失败: ' + err.message)
-  } finally {
-    manualSaving.value = false
-  }
 }
 
 // 导出生日清单Excel
